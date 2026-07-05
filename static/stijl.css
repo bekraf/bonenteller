@@ -1,0 +1,346 @@
+/* ===========================================================================
+   Gezondheidsdashboard — stijl (permanent donker thema)
+   ---------------------------------------------------------------------------
+   Basisschema: warm bijna-zwart als achtergrond, crème (#FFE4A7) als tekst,
+   desktopblauw (#234990) voor de knoppen en roest (#89380F) als hover-accent.
+   Alle kleuren staan hieronder als CSS-variabelen, per rol benoemd. De
+   waarden hier zijn de STANDAARD: op het tabblad Instellingen zijn de meeste
+   rollen (achtergrond, kaarten, knoppen, richtlijngrenzen, NOVA-groepen en
+   sporttypes) per gebruiker in te stellen; app.js zet die keuzes als
+   overrides op dezelfde variabelen.
+   =========================================================================== */
+
+:root {
+  --pagina: #171310;        /* pagina-achtergrond (warm bijna-zwart) */
+  --oppervlak: #221b15;     /* kaarten en grafieken */
+  --inkt: #ffe4a7;          /* hoofdtekst (crème) */
+  --inkt-2: #dcc08a;        /* secundaire tekst */
+  --gedempt: #b3945f;       /* aslabels e.d. */
+  /* haarlijnen en asranden mengen zich vanzelf naar de gekozen kaartkleur */
+  --gridlijn: color-mix(in srgb, var(--oppervlak) 84%, var(--inkt));
+  --aslijn: color-mix(in srgb, var(--oppervlak) 66%, var(--inkt));
+  --rand: rgba(255, 228, 167, 0.14);   /* dunne kaartranden */
+  --accent: #234990;        /* knoppen (desktopblauw) */
+  --roest: #89380f;         /* hover-wash (desktoproest) */
+  --reeks-1: #3987e5;       /* datakleur: opgelicht blauw, leesbaar op donker */
+  --goed: #58b85c;          /* groen: goed / gezakt gewicht */
+  --slecht: #e06060;        /* rood: slecht / gestegen gewicht */
+  /* kleurcodering t.o.v. de richtlijnen */
+  --boven-max: #e06060;     /* rood: waarde boven het maximum */
+  --onder-min: #dfa62b;     /* amber: waarde onder het minimum */
+  /* NOVA-groepen (1 = onbewerkt ... 4 = ultrabewerkt) */
+  --nova1: #58b85c;
+  --nova2: #dfa62b;
+  --nova3: #e2854e;
+  --nova4: #e06060;
+  /* sporttypes (gestapelde staven + legende in de sportgrafiek) */
+  --sport-lopen: #d03b3b;
+  --sport-krachttraining: #0ca30c;
+  --sport-fietsen: #fab219;
+  --sport-overig: #898781;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--pagina);
+  color: var(--inkt);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+  padding: 10px 24px 0;
+  flex-wrap: wrap;
+}
+
+nav { display: flex; gap: 4px; }
+
+nav button {
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--inkt-2);
+  padding: 8px 14px;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+nav button:hover { background: rgba(137, 56, 15, 0.35); }
+
+nav button.actief {
+  color: var(--inkt);
+  font-weight: 600;
+  border-bottom-color: var(--inkt);
+}
+
+main { padding: 16px 24px 48px; max-width: 1180px; margin: 0 auto; }
+
+.paneel { display: none; }
+.paneel.actief { display: block; }
+
+.kaart {
+  background: var(--oppervlak);
+  border: 1px solid var(--rand);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.kaart h2 { font-size: 15px; font-weight: 600; margin: 0 0 2px; }
+.kaart .subtitel { color: var(--gedempt); font-size: 13px; margin: 0 0 12px; }
+
+/* Statustegels */
+.tegels { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+
+.tegel {
+  background: var(--oppervlak);
+  border: 1px solid var(--rand);
+  border-radius: 12px;
+  padding: 14px 18px;
+  min-width: 150px;
+  flex: 1;
+}
+
+.tegel .label { color: var(--inkt-2); font-size: 13px; }
+.tegel .waarde { font-size: 28px; font-weight: 600; margin-top: 2px; }
+.tegel .delta { font-size: 13px; margin-top: 2px; color: var(--inkt-2); }
+.tegel .delta.goed { color: var(--goed); }
+.tegel .delta.slecht { color: var(--slecht); }
+
+/* Filterrij */
+.filters {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.filters button {
+  font: inherit;
+  font-size: 13px;
+  border: 1px solid var(--rand);
+  background: var(--oppervlak);
+  color: var(--inkt-2);
+  border-radius: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.filters button:hover { background: rgba(137, 56, 15, 0.35); }
+
+.filters button.actief {
+  color: var(--inkt);
+  font-weight: 600;
+  border-color: var(--inkt);
+}
+
+/* Grafieken */
+.grafiek { position: relative; }
+.grafiek svg { display: block; width: 100%; height: auto; }
+
+.grafiek .astekst {
+  fill: var(--gedempt);
+  font-size: 11px;
+  font-family: system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.grafiek .gridlijn { stroke: var(--gridlijn); stroke-width: 1; }
+.grafiek .aslijn { stroke: var(--aslijn); stroke-width: 1; }
+.grafiek .doellijn { stroke: var(--gedempt); stroke-width: 1; stroke-dasharray: 4 3; }
+.grafiek .doeltekst { fill: var(--inkt-2); font-size: 11px; }
+.grafiek .kruisdraad { stroke: var(--aslijn); stroke-width: 1; }
+/* BMI-grenslijnen (onder-/overgewicht) in de gewichtsgrafiek */
+.grafiek .grenslijn { stroke: var(--slecht); stroke-width: 1; }
+.grafiek .grenstekst { fill: var(--slecht); font-size: 11px; }
+
+.zweefinfo {
+  position: absolute;
+  pointer-events: none;
+  background: var(--oppervlak);
+  border: 1px solid var(--rand);
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  padding: 8px 12px;
+  font-size: 13px;
+  display: none;
+  white-space: nowrap;
+  z-index: 10;
+  color: var(--inkt);
+}
+
+.zweefinfo .zw-waarde { font-weight: 600; font-size: 15px; }
+.zweefinfo .zw-label { color: var(--inkt-2); font-size: 12px; }
+
+/* Tabellen */
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+
+th {
+  text-align: left;
+  color: var(--inkt-2);
+  font-weight: 600;
+  font-size: 12px;
+  border-bottom: 1px solid var(--aslijn);
+  padding: 6px 10px 6px 0;
+  white-space: nowrap;
+}
+
+td {
+  border-bottom: 1px solid var(--gridlijn);
+  padding: 6px 10px 6px 0;
+  vertical-align: top;
+}
+
+td.getal, th.getal { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Klikbare rijen (weekoverzicht -> dagboek): handje + roest-wash bij hover */
+tr.klikbaar { cursor: pointer; }
+tr.klikbaar:hover td { background: rgba(137, 56, 15, 0.3); }
+
+/* Klikbare cellen (dagboek: uur/hoeveelheid bewerken door erop te klikken) */
+td.klik-bewerk { cursor: pointer; }
+td.klik-bewerk:hover { color: var(--inkt); text-decoration: underline dotted; }
+tr.totaalrij td { font-weight: 600; border-top: 1px solid var(--aslijn); }
+tr.doelrij td { color: var(--gedempt); font-size: 12px; border-bottom: none; }
+td.gedempt { color: var(--gedempt); }
+
+/* Waarden getoetst aan de richtlijnen (dagboek-totaal, weekoverzicht en
+   legende): rood boven max, amber onder min, groen netjes binnen bereik.
+   Het pijltje (↑/↓) staat in de tekst zelf, zodat het verschil ook zonder
+   kleur te zien is. */
+.boven { color: var(--boven-max); font-weight: 600; }
+.onder { color: var(--onder-min); font-weight: 600; }
+.binnen { color: var(--goed); }
+
+/* NOVA-kleuren voor voedingsnamen en percentages */
+.nova1 { color: var(--nova1); }
+.nova2 { color: var(--nova2); }
+.nova3 { color: var(--nova3); }
+.nova4 { color: var(--nova4); }
+
+/* Legende bij een grafiek met meerdere reeksen: gekleurd blokje + naam */
+.legende { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+.legende .sleutel { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--inkt-2); }
+.legende .vlak { width: 12px; height: 12px; border-radius: 3px; }
+
+/* Formulieren */
+form.regel {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+form.regel label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--inkt-2);
+}
+
+input, select {
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 8px;
+  border: 1px solid var(--aslijn);
+  border-radius: 8px;
+  background: var(--pagina);
+  color: var(--inkt);
+  color-scheme: dark;   /* donkere datumkiezer/spinners in de browser */
+}
+
+input:focus, select:focus { outline: 2px solid var(--reeks-1); outline-offset: 0; }
+input:disabled, select:disabled { opacity: 0.55; }
+
+input[type="number"] { width: 90px; }
+input[type="date"] { width: 150px; }
+
+button.primair {
+  font: inherit;
+  font-size: 14px;
+  background: var(--accent);
+  color: var(--inkt);
+  border: none;
+  border-radius: 8px;
+  padding: 7px 16px;
+  cursor: pointer;
+}
+
+button.primair:hover { filter: brightness(1.2); }
+
+button.klein {
+  font: inherit;
+  font-size: 12px;
+  background: none;
+  border: 1px solid var(--rand);
+  border-radius: 6px;
+  color: var(--inkt-2);
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+button.klein:hover { border-color: var(--slecht); color: var(--slecht); }
+
+.dagkop {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.dagkop button {
+  font: inherit;
+  border: 1px solid var(--rand);
+  background: var(--oppervlak);
+  border-radius: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  color: var(--inkt-2);
+}
+
+.dagkop button:hover { background: rgba(137, 56, 15, 0.35); }
+
+.dagkop .weeklabel { font-weight: 600; }
+
+.melding { color: var(--slecht); font-size: 13px; min-height: 18px; margin-top: 6px; }
+.melding.ok { color: var(--goed); }
+
+.kolommen { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .kolommen { grid-template-columns: 1fr; } }
+
+/* Instellingen-tabblad: label + invoerveld + uitleg per rij */
+.inst-rij {
+  display: grid;
+  grid-template-columns: 220px 110px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--gridlijn);
+}
+
+.inst-rij label { font-size: 14px; color: var(--inkt-2); }
+.inst-rij input { width: 100px; }
+.inst-rij .hint { color: var(--gedempt); font-size: 12px; }
+
+/* Kleurkiezers op het Instellingen-tabblad */
+.inst-rij input[type="color"] {
+  width: 52px;
+  height: 30px;
+  padding: 2px 3px;
+  cursor: pointer;
+}
+
+#inst-richtlijnen input { width: 90px; }
+
+.verborgen { display: none !important; }

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<!-- ==========================================================================
+  Gezondheidsdashboard — de enige HTML-pagina van de app.
+  Vier tabbladen (secties met class "paneel"); app.js schakelt ertussen en
+  vult alle tabellen en grafieken met data uit de API. Vaste volgorde van de
+  voedingswaarden overal: kcal, vet, koolhydraten, eiwit, zout, vezels.
+=========================================================================== -->
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gezondheidsdashboard</title>
+<link rel="stylesheet" href="/stijl.css">
+</head>
+<body>
+
+<header>
+  <nav id="tabs">
+    <button data-paneel="dashboard" class="actief">Dashboard</button>
+    <button data-paneel="dagboek">Dagboek</button>
+    <button data-paneel="week">Weekoverzicht</button>
+    <button data-paneel="voedingsmiddelen">Voedingsmiddelen</button>
+    <button data-paneel="instellingen">Instellingen</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ================= DASHBOARD ================= -->
+  <section id="paneel-dashboard" class="paneel actief">
+
+    <div class="tegels" id="tegels"></div>
+
+    <div class="filters" id="bereikfilters">
+      <span style="color:var(--gedempt);font-size:13px">Periode:</span>
+      <button data-dagen="7">Laatste 7 dagen</button>
+      <button data-dagen="14">Laatste 14 dagen</button>
+      <button data-dagen="30">Laatste 30 dagen</button>
+      <button data-dagen="90">Laatste 90 dagen</button>
+      <button data-dagen="180">Laatste 180 dagen</button>
+      <button data-dagen="0" class="actief">Alles</button>
+    </div>
+
+    <div class="kaart">
+      <h2>Gewicht</h2>
+      <p class="subtitel" id="gewicht-subtitel">kg per meting, met doellijn — achtergrond = BMI-zones (groen in het midden, rood buiten 18,5–24,9)</p>
+      <div class="grafiek" id="grafiek-gewicht"></div>
+    </div>
+
+    <div class="kaart">
+      <h2>Calorieën per dag</h2>
+      <p class="subtitel" id="kcal-subtitel">kcal gegeten per dag, gekleurd t.o.v. de richtlijn</p>
+      <div class="legende" id="legende-kcal"></div>
+      <div class="grafiek" id="grafiek-kcal"></div>
+    </div>
+
+    <div class="kaart">
+      <h2>Sport per dag</h2>
+      <p class="subtitel">minuten per dag, kleur per type activiteit</p>
+      <div class="legende" id="legende-sport"></div>
+      <div class="grafiek" id="grafiek-sport"></div>
+    </div>
+
+  </section>
+
+  <!-- ================= DAGBOEK ================= -->
+  <section id="paneel-dagboek" class="paneel">
+
+    <div class="dagkop">
+      <button id="dag-vorige" title="Vorige dag">←</button>
+      <input type="date" id="dag-datum">
+      <button id="dag-volgende" title="Volgende dag">→</button>
+      <button id="dag-vandaag">Vandaag</button>
+      <span id="dag-label" class="weeklabel"></span>
+    </div>
+
+    <div class="kaart">
+      <h2>Voeding</h2>
+      <div id="dag-voeding"></div>
+
+      <form class="regel" id="form-voeding">
+        <label>Voedingsmiddel
+          <input list="voedingslijst" id="vm-zoek" placeholder="zoek…" style="width:220px" autocomplete="off">
+          <datalist id="voedingslijst"></datalist>
+        </label>
+        <label>Hoeveelheid
+          <input type="number" id="vm-hoeveelheid" step="any" min="0.01" value="1">
+        </label>
+        <span id="vm-eenheid" style="font-size:13px;color:var(--gedempt);padding-bottom:8px;min-width:60px"></span>
+        <label>Uur
+          <input type="number" id="vm-uur" min="0" max="24" style="width:64px">
+        </label>
+        <button class="primair" type="submit">Toevoegen</button>
+      </form>
+
+      <details style="margin-top:10px">
+        <summary style="font-size:13px;color:var(--inkt-2);cursor:pointer">Vrije invoer (niet in catalogus)</summary>
+        <form class="regel" id="form-vrij">
+          <label>Naam <input id="vrij-naam" style="width:180px"></label>
+          <label>Hoeveelheid <input type="number" id="vrij-hoeveelheid" step="any" min="0.01" value="1"></label>
+          <label>Eenheid
+            <select id="vrij-eenheid"><option value="stuks">stuks</option><option value="gram">gram</option></select>
+          </label>
+          <label>kcal <input type="number" id="vrij-kcal" step="any" min="0" value="0"></label>
+          <label>Vet <input type="number" id="vrij-vet" step="any" min="0" value="0"></label>
+          <label>Koolhydraten <input type="number" id="vrij-koolhydraten" step="any" min="0" value="0"></label>
+          <label>Eiwit <input type="number" id="vrij-eiwit" step="any" min="0" value="0"></label>
+          <label>Zout <input type="number" id="vrij-zout" step="any" min="0" value="0"></label>
+          <label>Vezels <input type="number" id="vrij-vezels" step="any" min="0" value="0"></label>
+          <label>Uur <input type="number" id="vrij-uur" min="0" max="24" style="width:64px"></label>
+          <button class="primair" type="submit">Toevoegen</button>
+        </form>
+      </details>
+      <p class="melding" id="melding-voeding"></p>
+    </div>
+
+    <div class="kolommen">
+      <div class="kaart">
+        <h2>Sport</h2>
+        <div id="dag-sport"></div>
+        <form class="regel" id="form-sport">
+          <label>Type
+            <select id="sport-type">
+              <option value="lopen">lopen</option>
+              <option value="fietsen">fietsen</option>
+              <option value="krachttraining">krachttraining</option>
+            </select>
+          </label>
+          <label>Duur (min) <input type="number" id="sport-duur" min="1" step="1" value="60"></label>
+          <label id="sport-snelheid-label">Snelheid (km/u) <input type="number" id="sport-snelheid" min="0.1" step="any" value="11.6"></label>
+          <button class="primair" type="submit">Toevoegen</button>
+        </form>
+        <p class="melding" id="melding-sport"></p>
+      </div>
+
+      <div class="kaart">
+        <h2>Gewicht</h2>
+        <p class="subtitel" id="dag-gewicht-huidig"></p>
+        <form class="regel" id="form-gewicht">
+          <label>Gewicht (kg) <input type="number" id="gewicht-kg" step="0.1" min="1"></label>
+          <button class="primair" type="submit">Opslaan</button>
+        </form>
+        <p class="melding" id="melding-gewicht"></p>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ================= WEEKOVERZICHT ================= -->
+  <section id="paneel-week" class="paneel">
+    <div class="dagkop">
+      <button id="week-vorige" title="Vorige week">←</button>
+      <span class="weeklabel" id="week-label"></span>
+      <button id="week-volgende" title="Volgende week">→</button>
+      <button id="week-huidige">Deze week</button>
+      <span style="color:var(--gedempt);font-size:13px"><span class="boven">↑ boven max</span> · <span class="onder">↓ onder min</span></span>
+    </div>
+    <div class="kaart">
+      <div id="week-tabel"></div>
+    </div>
+  </section>
+
+  <!-- ================= INSTELLINGEN ================= -->
+  <!-- De invoervelden worden door app.js opgebouwd (één per instelling);
+       hier staat alleen het skelet. -->
+  <section id="paneel-instellingen" class="paneel">
+    <form id="form-instellingen">
+      <div class="kaart">
+        <h2>Algemeen</h2>
+        <p class="subtitel">lichaam en energie</p>
+        <div id="inst-algemeen"></div>
+      </div>
+      <div class="kaart">
+        <h2>Dagelijkse richtlijnen</h2>
+        <div id="inst-richtlijnen"></div>
+      </div>
+      <div class="kaart">
+        <h2>Kleuren</h2>
+        <p class="subtitel">achtergrond, knoppen, richtlijngrenzen, NOVA-groepen en sporttypes</p>
+        <div id="inst-kleuren"></div>
+        <button class="klein" type="button" id="inst-kleuren-standaard" style="margin-top:10px">Standaardkleuren terugzetten</button>
+      </div>
+      <div class="kaart">
+        <button class="primair" type="submit">Opslaan</button>
+        <p class="melding" id="melding-instellingen"></p>
+      </div>
+    </form>
+  </section>
+
+  <!-- ================= VOEDINGSMIDDELEN ================= -->
+  <section id="paneel-voedingsmiddelen" class="paneel">
+    <div class="kaart">
+      <h2 id="cat-titel">Nieuw voedingsmiddel</h2>
+      <p class="subtitel">waarden per stuk of per 100 g — kcal, vet, koolhydraten, eiwit, zout, vezels</p>
+      <form class="regel" id="form-catalogus">
+        <input type="hidden" id="cat-id">
+        <label>Naam <input id="cat-naam" style="width:200px" required></label>
+        <label>Eenheid
+          <select id="cat-eenheid"><option value="stuk">per stuk</option><option value="100g">per 100 g</option></select>
+        </label>
+        <label>NOVA-groep
+          <select id="cat-nova">
+            <option value="">onbekend</option>
+            <option value="1">1 – onbewerkt of minimaal bewerkt</option>
+            <option value="2">2 – bewerkt culinair ingrediënt</option>
+            <option value="3">3 – bewerkt</option>
+            <option value="4">4 – ultrabewerkt</option>
+          </select>
+        </label>
+        <label>kcal <input type="number" id="cat-kcal" step="any" min="0" value="0"></label>
+        <label>Vet <input type="number" id="cat-vet" step="any" min="0" value="0"></label>
+        <label>Koolhydraten <input type="number" id="cat-koolhydraten" step="any" min="0" value="0"></label>
+        <label>Eiwit <input type="number" id="cat-eiwit" step="any" min="0" value="0"></label>
+        <label>Zout <input type="number" id="cat-zout" step="any" min="0" value="0"></label>
+        <label>Vezels <input type="number" id="cat-vezels" step="any" min="0" value="0"></label>
+        <button class="primair" type="submit" id="cat-opslaan">Toevoegen</button>
+        <button class="klein verborgen" type="button" id="cat-annuleer">Annuleer</button>
+      </form>
+      <p class="melding" id="melding-catalogus"></p>
+    </div>
+    <div class="kaart">
+      <div class="dagkop">
+        <input id="cat-zoek" placeholder="zoeken…" style="width:220px">
+        <span id="cat-aantal" style="color:var(--gedempt);font-size:13px"></span>
+      </div>
+      <div id="cat-tabel"></div>
+    </div>
+  </section>
+
+</main>
+
+<div class="zweefinfo" id="zweefinfo"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
