@@ -1,0 +1,5 @@
+- Weekoverzicht
+  - Verwijder de pijltjes van boven max onder min op het weekoverzicht, als ook laat alle nummers afgerond zien, ik wil geen comma/s. De kleuren mogen wel behouden blijfen maar zorg dat de grone teks dezelfe font heeft als ook Boldness enzovoort ... 
+  - Bij het berekenen van de nova percentages moet er gebruik gemaakt worden van het aantal kcal dat dat soort voedsel die dag heeft ingenomen.
+- Dagboek
+  - Voorzie naast het kruisje om de record te verwijderen ook een duplicate knop om hem te dupliceren
