@@ -262,12 +262,18 @@ def api_dagen(con, query):
         d["nova_kcal"] = {}
         dagen[r["datum"]] = d
 
-    # ...dan per dag de kcal opgeteld per NOVA-groep (via de catalogus;
-    # vrije invoer zonder catalogusitem telt als 'onbekend')...
+    # ...dan per dag de kcal opgeteld per NOVA-groep. De groep komt uit de
+    # catalogus: eerst via de koppeling (voedingsmiddel_id), anders via de
+    # naam — zo tellen ook regels mee die hun koppeling kwijt zijn (bv. na
+    # het verwijderen en opnieuw toevoegen van een catalogusitem). Vrije
+    # invoer zonder catalogusnaam telt als 'onbekend'...
     for r in con.execute(
-            "SELECT l.datum, vm.nova nova, SUM(l.kcal) kcal FROM voedingslog l "
+            "SELECT l.datum, COALESCE(vm.nova, vmn.nova) nova, SUM(l.kcal) kcal "
+            "FROM voedingslog l "
             "LEFT JOIN voedingsmiddelen vm ON vm.id = l.voedingsmiddel_id "
-            "WHERE l.datum BETWEEN ? AND ? GROUP BY l.datum, vm.nova", (van, tot)):
+            "LEFT JOIN voedingsmiddelen vmn ON vmn.naam = l.naam "
+            "WHERE l.datum BETWEEN ? AND ? "
+            "GROUP BY l.datum, COALESCE(vm.nova, vmn.nova)", (van, tot)):
         dag = dagen.get(r["datum"])
         if dag is not None:
             sleutel = str(r["nova"]) if r["nova"] else "onbekend"
@@ -288,11 +294,13 @@ def api_dagen(con, query):
 
 def api_dag(con, datum):
     """Alles van één dag, voor het dagboek: elke gegeten portie (gesorteerd
-    op uur, met de NOVA-groep uit de catalogus), de sport en het dagtotaal."""
+    op uur, met de NOVA-groep uit de catalogus — via de koppeling of anders
+    via de naam, net als in api_dagen), de sport en het dagtotaal."""
     eis_datum(datum)
     regels = [dict(r) for r in con.execute(
-        "SELECT l.*, vm.nova FROM voedingslog l "
+        "SELECT l.*, COALESCE(vm.nova, vmn.nova) nova FROM voedingslog l "
         "LEFT JOIN voedingsmiddelen vm ON vm.id = l.voedingsmiddel_id "
+        "LEFT JOIN voedingsmiddelen vmn ON vmn.naam = l.naam "
         "WHERE l.datum = ? "
         "ORDER BY l.uur IS NULL, l.uur, l.id", (datum,))]   # zonder uur achteraan
     sport = [dict(r) for r in con.execute(
@@ -356,6 +364,23 @@ def api_voedingslog_nieuw(con, gegevens):
         "hoeveelheid, eenheid, kcal, vet, koolhydraten, eiwit, zout, vezels) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (datum, uur, vm_id, naam, hoeveelheid, eenheid, *waarden))
+    con.commit()
+    return {"ok": True, "id": cur.lastrowid}
+
+
+def api_voedingslog_dupliceer(con, log_id):
+    """Een gelogde portie dupliceren ('nog zo eentje'): zelfde dag, zelfde
+    uur, zelfde waarden. De kopie neemt de bewaarde waarden van de originele
+    regel over, ook als de catalogus intussen gewijzigd is."""
+    rij = con.execute("SELECT id FROM voedingslog WHERE id = ?", (log_id,)).fetchone()
+    if rij is None:
+        raise FoutInvoer("logregel niet gevonden")
+    cur = con.execute(
+        "INSERT INTO voedingslog (datum, uur, voedingsmiddel_id, naam, "
+        "hoeveelheid, eenheid, kcal, vet, koolhydraten, eiwit, zout, vezels) "
+        "SELECT datum, uur, voedingsmiddel_id, naam, hoeveelheid, eenheid, "
+        "kcal, vet, koolhydraten, eiwit, zout, vezels "
+        "FROM voedingslog WHERE id = ?", (log_id,))
     con.commit()
     return {"ok": True, "id": cur.lastrowid}
 
@@ -538,6 +563,9 @@ class Handler(BaseHTTPRequestHandler):
                 return api_voedingsmiddel_nieuw(con, gegevens)
             if pad == "/api/voedingslog":
                 return api_voedingslog_nieuw(con, gegevens)
+            # POST /api/voedingslog/<id>/dupliceer: kopie van een logregel.
+            if len(delen) == 3 and delen[0] == "voedingslog" and delen[2] == "dupliceer":
+                return api_voedingslog_dupliceer(con, int(delen[1]))
             if pad == "/api/sport":
                 return api_sport_nieuw(con, gegevens)
 

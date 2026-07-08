@@ -213,12 +213,13 @@ tr.doelrij td { color: var(--gedempt); font-size: 12px; border-bottom: none; }
 td.gedempt { color: var(--gedempt); }
 
 /* Waarden getoetst aan de richtlijnen (dagboek-totaal, weekoverzicht en
-   legende): rood boven max, amber onder min, groen netjes binnen bereik.
-   Het pijltje (↑/↓) staat in de tekst zelf, zodat het verschil ook zonder
-   kleur te zien is. */
+   legende): rood boven max, amber onder min, groen netjes binnen bereik —
+   alle drie in hetzelfde lettertype en gewicht, alleen de kleur verschilt.
+   In het dagboek staat er ook een pijltje (↑/↓) in de tekst, zodat het
+   verschil daar ook zonder kleur te zien is. */
 .boven { color: var(--boven-max); font-weight: 600; }
 .onder { color: var(--onder-min); font-weight: 600; }
-.binnen { color: var(--goed); }
+.binnen { color: var(--goed); font-weight: 600; }
 
 /* NOVA-kleuren voor voedingsnamen en percentages */
 .nova1 { color: var(--nova1); }
@@ -290,6 +291,13 @@ button.klein {
 }
 
 button.klein:hover { border-color: var(--slecht); color: var(--slecht); }
+
+/* De dupliceerknop is geen destructieve actie: accentkleur i.p.v. rood. */
+button.klein.kopieer:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Actieknopjes naast elkaar in een tabelcel (dagboek: dupliceer + verwijder) */
+td.acties { white-space: nowrap; }
+td.acties button + button { margin-left: 6px; }
 
 .dagkop {
   display: flex;

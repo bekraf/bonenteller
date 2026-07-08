@@ -124,13 +124,14 @@ function sportTekst(s) {
 }
 
 // Tabelcel voor een voedingswaarde, getoetst aan de richtlijnen uit de
-// instellingen: boven het maximum = rood met ↑, onder het minimum = amber
-// met ↓, netjes binnen het bereik = groen. Het pijltje zorgt dat het
-// verschil ook zonder kleur leesbaar is.
-function nutrientCel(k, waarde, notatie = fmt) {
+// instellingen: boven het maximum = rood, onder het minimum = amber, netjes
+// binnen het bereik = groen. In het dagboek komt er een pijltje (↑/↓) bij
+// zodat het verschil ook zonder kleur leesbaar is; het weekoverzicht toont
+// alleen de kleur (pijl = false).
+function nutrientCel(k, waarde, notatie = fmt, pijl = true) {
   const min = instellingen[k + "_min"], max = instellingen[k + "_max"];
-  if (max != null && waarde > max) return el("td", { class: "getal boven" }, `${notatie.format(waarde)} ↑`);
-  if (min != null && waarde < min) return el("td", { class: "getal onder" }, `${notatie.format(waarde)} ↓`);
+  if (max != null && waarde > max) return el("td", { class: "getal boven" }, notatie.format(waarde) + (pijl ? " ↑" : ""));
+  if (min != null && waarde < min) return el("td", { class: "getal onder" }, notatie.format(waarde) + (pijl ? " ↓" : ""));
   if (min == null && max == null) return el("td", { class: "getal" }, notatie.format(waarde));
   return el("td", { class: "getal binnen" }, notatie.format(waarde));
 }
@@ -843,6 +844,8 @@ async function laadDag() {
       const hoevCel = el("td", { class: "getal gedempt klik-bewerk", title: "Klik om te bewerken" },
         r.eenheid === "stuks" ? `${fmt.format(r.hoeveelheid)}×` : `${fmt.format(r.hoeveelheid)} g`);
       const knop = el("button", { class: "klein", title: "Verwijder" }, "×");
+      // ⧉ dupliceert de regel (zelfde dag, uur en waarden) — voor "nog zo eentje".
+      const dupKnop = el("button", { class: "klein kopieer", title: "Dupliceer" }, "⧉");
       let veldUur = null, veldHoev = null;   // bestaan zodra de rij bewerkt wordt
 
       async function opslaan() {
@@ -885,13 +888,19 @@ async function laadDag() {
         await api(`/api/voedingslog/${r.id}`, { method: "DELETE" });
         laadDag();
       });
+      dupKnop.addEventListener("click", async () => {
+        try {
+          await post(`/api/voedingslog/${r.id}/dupliceer`, {});
+          laadDag();
+        } catch (fout) { toonMelding("melding-voeding", fout.message); }
+      });
 
       return el("tr", {},
         uurCel,
         el("td", { class: r.nova ? `nova${r.nova}` : "" }, r.naam),
         hoevCel,
         ...NUTRIENTEN.map((k) => el("td", { class: "getal" }, fmt.format(r[k] || 0))),
-        el("td", {}, knop));
+        el("td", { class: "acties" }, dupKnop, knop));
     });
 
     // Totaalrij van de dag; cellen kleuren als het totaal buiten de
@@ -1107,8 +1116,8 @@ async function laadWeek() {
         isVandaag ? el("span", { class: "gedempt" }, " · vandaag") : ""),
       el("td", { class: "gedempt" }, datumKort(datum)),
       ...NUTRIENTEN.map((k) =>
-        d && d.kcal > 0 && !isVandaag ? nutrientCel(k, d[k])
-                        : el("td", { class: "getal gedempt" }, d ? fmt.format(d[k]) : "")),
+        d && d.kcal > 0 && !isVandaag ? nutrientCel(k, d[k], fmt0, false)
+                        : el("td", { class: "getal gedempt" }, d ? fmt0.format(d[k]) : "")),
       d && d.kcal > 0 ? novaCel(d.nova_kcal, d.kcal) : el("td", {}),
       el("td", {}, d ? d.sport.map(sportTekst).join(" · ") : "")));
   }
@@ -1119,7 +1128,7 @@ async function laadWeek() {
   const gemiddelde = el("tr", { class: "totaalrij" },
     el("td", {}, "Gemiddelde per dag"), el("td", {}),
     ...NUTRIENTEN.map((k) =>
-      dagenMetEten ? nutrientCel(k, som[k] / dagenMetEten, fmt0)
+      dagenMetEten ? nutrientCel(k, som[k] / dagenMetEten, fmt0, false)
                    : el("td", { class: "getal" }, "")),
     dagenMetEten ? novaCel({ 1: novaSom[1], 2: novaSom[2], 3: novaSom[3], 4: novaSom[4] }, weekKcal)
                  : el("td", {}),

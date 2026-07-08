@@ -94,6 +94,7 @@ Alles onder `/api/` spreekt JSON; al het andere is een statisch bestand uit
 | GET | `/api/dagen?van=&tot=` | dagtotalen (voeding + sport) in een periode |
 | GET | `/api/dag/<datum>` | alle details van één dag |
 | POST | `/api/voedingslog` | portie loggen (uit catalogus of vrije invoer) |
+| POST | `/api/voedingslog/<id>/dupliceer` | portie dupliceren (zelfde dag, uur en waarden) |
 | PUT | `/api/voedingslog/<id>` | hoeveelheid/uur van een portie bijstellen |
 | DELETE | `/api/voedingslog/<id>` | portie verwijderen |
 | POST | `/api/sport` | sportactiviteit loggen |
