@@ -322,6 +322,15 @@ td.acties button + button { margin-left: 6px; }
 
 .dagkop .weeklabel { font-weight: 600; }
 
+/* Gewichtsverloop onder de weektabel: kg als hoofdgetal (groen gezakt /
+   rood gestegen), het pond-equivalent klein en gedempt erachter. */
+.week-gewicht { margin-top: 12px; font-size: 15px; }
+.week-gewicht .label { color: var(--gedempt); }
+.week-gewicht .waarde { font-weight: 600; }
+.week-gewicht .waarde.goed { color: var(--goed); }
+.week-gewicht .waarde.slecht { color: var(--slecht); }
+.week-gewicht .pond { color: var(--gedempt); font-size: 12px; }
+
 .melding { color: var(--slecht); font-size: 13px; min-height: 18px; margin-top: 6px; }
 .melding.ok { color: var(--goed); }
 

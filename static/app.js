@@ -1220,7 +1220,10 @@ async function laadWeek() {
   document.getElementById("week-label").textContent =
     (nummer >= 1 ? `Week ${nummer}: ` : "") + `${datumKort(weekStart)} – ${datumKort(einde)}`;
 
-  const dagen = await api(`/api/dagen?van=${weekStart}&tot=${einde}`);
+  const [dagen, gewichten] = await Promise.all([
+    api(`/api/dagen?van=${weekStart}&tot=${einde}`),
+    api("/api/gewicht"),
+  ]);
   const perDatum = Object.fromEntries(dagen.map((d) => [d.datum, d]));
 
   // NOVA-verdeling van een dag: per groep het percentage van de kcal,
@@ -1301,6 +1304,27 @@ async function laadWeek() {
         el("span", { class: "nova4" }, "4")),
       el("th", {}, "Sport"))),
     el("tbody", {}, ...rijen, gemiddelde)));
+
+  // Onder de tabel: hoeveel kg er die week bij- of afgekomen is. Er wordt op
+  // vrijdagochtend gewogen, dus het verschil van deze week (vr t/m do) is de
+  // weging van de vrijdag erná min die van de eigen vrijdag. Alleen tonen
+  // als beide wegingen bestaan — voor de lopende week is de eindweging er
+  // nog niet, dus die blijft vanzelf leeg.
+  const gewichtOp = Object.fromEntries(gewichten.map((g) => [g.datum, g.gewicht]));
+  const begin = gewichtOp[weekStart], eind = gewichtOp[plusDagen(weekStart, 7)];
+  const houder = document.getElementById("week-gewicht");
+  houder.replaceChildren();
+  if (begin != null && eind != null) {
+    const verschil = eind - begin;
+    const pond = verschil * 2.20462;
+    const teken = verschil > 0 ? "+" : "";
+    const woord = verschil < 0 ? "afgevallen" : verschil > 0 ? "bijgekomen" : "gelijk gebleven";
+    houder.append(
+      el("span", { class: "label" }, "Gewicht deze week: "),
+      el("span", { class: "waarde " + (verschil <= 0 ? "goed" : "slecht") },
+        `${teken}${fmt.format(verschil)} kg ${woord}`),
+      el("span", { class: "pond" }, ` (${teken}${fmt.format(pond)} lb - pond)`));
+  }
 }
 
 /* ================= 7. Voedingsmiddelen (catalogus) ================= */
