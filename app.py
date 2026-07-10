@@ -162,6 +162,26 @@ def api_gewicht_nieuw(con, gegevens):
     return {"ok": True}
 
 
+def api_gewicht_bewerk(con, gewicht_id, gegevens):
+    """Datum en/of gewicht van een bestaande meting aanpassen (vanuit het
+    Gegevens-tabblad). Er blijft één meting per datum: verhuizen naar een
+    datum die al een meting heeft geeft een nette fout."""
+    rij = con.execute("SELECT * FROM gewichtmetingen WHERE id = ?", (gewicht_id,)).fetchone()
+    if rij is None:
+        raise FoutInvoer("meting niet gevonden")
+    datum = eis_datum(gegevens.get("datum"))
+    gewicht = eis_getal(gegevens.get("gewicht"), "gewicht", 1)
+    ander = con.execute(
+        "SELECT 1 FROM gewichtmetingen WHERE datum = ? AND id != ?",
+        (datum, gewicht_id)).fetchone()
+    if ander is not None:
+        raise FoutInvoer(f"op {datum} bestaat al een meting")
+    con.execute("UPDATE gewichtmetingen SET datum = ?, gewicht = ? WHERE id = ?",
+                (datum, gewicht, gewicht_id))
+    con.commit()
+    return {"ok": True}
+
+
 # ---------------------------------------------------------------------------
 # API: voedingsmiddelencatalogus
 # ---------------------------------------------------------------------------
@@ -418,6 +438,13 @@ def api_voedingslog_bewerk(con, log_id, gegevens):
 # API: sportactiviteiten
 # ---------------------------------------------------------------------------
 
+def api_sport_lijst(con):
+    """Alle sportactiviteiten, nieuwste eerst (voor het Gegevens-tabblad)."""
+    return [dict(r) for r in con.execute(
+        "SELECT id, datum, type, duur_minuten, snelheid_kmh "
+        "FROM sportactiviteiten ORDER BY datum DESC, id DESC")]
+
+
 def api_sport_nieuw(con, gegevens):
     """Sportactiviteit loggen: type, duur in minuten en (behalve bij
     krachttraining) eventueel de snelheid in km/u."""
@@ -435,6 +462,26 @@ def api_sport_nieuw(con, gegevens):
         "VALUES (?, ?, ?, ?, ?)", (datum, soort, duur, snelheid, tekst))
     con.commit()
     return {"ok": True, "id": cur.lastrowid}
+
+
+def api_sport_bewerk(con, sport_id, gegevens):
+    """Datum, duur en/of snelheid van een sportactiviteit aanpassen (tikfout
+    verbeteren of naar de juiste dag verhuizen); de leesbare omschrijving
+    wordt opnieuw opgebouwd. Zonder 'datum' blijft de datum staan."""
+    rij = con.execute("SELECT * FROM sportactiviteiten WHERE id = ?", (sport_id,)).fetchone()
+    if rij is None:
+        raise FoutInvoer("sportactiviteit niet gevonden")
+    datum = gegevens.get("datum")
+    datum = eis_datum(datum) if datum not in (None, "") else rij["datum"]
+    duur = eis_getal(gegevens.get("duur_minuten"), "duur_minuten", 1)
+    snelheid = gegevens.get("snelheid_kmh")
+    snelheid = eis_getal(snelheid, "snelheid_kmh", 0.1) if snelheid not in (None, "") else None
+    tekst = f"{duur:g}m {rij['type']}" + (f" {snelheid:g}km/u" if snelheid else "")
+    con.execute(
+        "UPDATE sportactiviteiten SET datum = ?, duur_minuten = ?, snelheid_kmh = ?, "
+        "omschrijving = ? WHERE id = ?", (datum, duur, snelheid, tekst, sport_id))
+    con.commit()
+    return {"ok": True}
 
 
 # Vaste verwijderquery's per URL-naam; zo staat er nooit een variabele
@@ -553,6 +600,8 @@ class Handler(BaseHTTPRequestHandler):
                 return api_voedingsmiddelen(con)
             if pad == "/api/dagen":
                 return api_dagen(con, query)
+            if pad == "/api/sport":
+                return api_sport_lijst(con)
             if len(delen) == 2 and delen[0] == "dag":   # /api/dag/2026-07-03
                 return api_dag(con, delen[1])
 
@@ -579,6 +628,12 @@ class Handler(BaseHTTPRequestHandler):
             # PUT /api/voedingslog/<id>: hoeveelheid/uur van een logregel bewerken.
             if len(delen) == 2 and delen[0] == "voedingslog":
                 return api_voedingslog_bewerk(con, int(delen[1]), gegevens)
+            # PUT /api/sport/<id>: datum/duur/snelheid van een activiteit bewerken.
+            if len(delen) == 2 and delen[0] == "sport":
+                return api_sport_bewerk(con, int(delen[1]), gegevens)
+            # PUT /api/gewicht/<id>: datum/gewicht van een meting bewerken.
+            if len(delen) == 2 and delen[0] == "gewicht":
+                return api_gewicht_bewerk(con, int(delen[1]), gegevens)
 
         if methode == "DELETE" and len(delen) == 2:
             # DELETE /api/voedingsmiddelen/<id>: catalogusitem weg (log blijft).

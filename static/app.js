@@ -15,8 +15,9 @@
      5. Dagboek
      6. Weekoverzicht
      7. Voedingsmiddelen (catalogus)
-     8. Instellingen
-     9. opstarten
+     8. Gegevens (gewicht en sport rechtstreeks bewerken)
+     9. Instellingen
+    10. opstarten
 
    Belangrijk principe: tekst uit de database gaat ALTIJD via textContent in
    de pagina (nooit innerHTML), zodat een rare naam nooit als HTML kan worden
@@ -67,10 +68,18 @@ async function api(pad, opties = {}) {
   return gegevens;
 }
 
-// Kort hulpje voor POST met JSON-body.
+// Korte hulpjes voor POST en PUT met JSON-body.
 function post(pad, gegevens) {
   return api(pad, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(gegevens),
+  });
+}
+
+function put(pad, gegevens) {
+  return api(pad, {
+    method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(gegevens),
   });
@@ -136,6 +145,92 @@ function nutrientCel(k, waarde, notatie = fmt, pijl = true) {
   return el("td", { class: "getal binnen" }, notatie.format(waarde));
 }
 
+// Onderrapportage: je logt onbewust een paar procent kcal te weinig. Deze
+// factor rekent gelogde kcal om naar de geschatte echte inname. Bewust alleen
+// toegepast op de kcal-grafiek van het dashboard en het weekgemiddelde;
+// het dagboek en alle andere getallen tonen de ruwe logwaarden.
+function metOnderrapportage(kcal) {
+  return kcal * (1 + (instellingen.onderrapportage_pct || 0) / 100);
+}
+
+// Getalvelden: zodra een veld focus heeft kun je er ook met het muiswiel
+// over scrollen om de waarde te verhogen/verlagen — typen blijft gewoon
+// werken. De stap volgt het step-attribuut ("any" of leeg telt als 1);
+// min en max worden gerespecteerd.
+document.addEventListener("wheel", (e) => {
+  const veld = e.target;
+  if (!(veld instanceof HTMLInputElement) || veld.type !== "number") return;
+  if (document.activeElement !== veld) return;   // alleen het actieve veld
+  e.preventDefault();                            // niet ook de pagina scrollen
+  const stap = Number(veld.step) > 0 ? Number(veld.step) : 1;
+  let w = (Number(veld.value) || 0) + (e.deltaY < 0 ? stap : -stap);
+  if (veld.min !== "" && w < Number(veld.min)) w = Number(veld.min);
+  if (veld.max !== "" && w > Number(veld.max)) w = Number(veld.max);
+  veld.value = Math.round(w * 1000) / 1000;      // geen zwevendekommarestjes
+  veld.dispatchEvent(new Event("input", { bubbles: true }));
+}, { passive: false });
+
+/* Tabelrij met bewerkbare cellen (zelfde gedrag als de voedingstabel in het
+   dagboek): klik op een bewerkbare waarde en de rij gaat in bewerkmodus —
+   alle bewerkbare cellen worden invoervelden en de ×-knop (verwijderen)
+   wordt een ✓ (opslaan). Enter slaat ook op, Esc annuleert door te herladen.
+     cellen   — één beschrijving per cel, in tabelvolgorde. {tekst, klasse?}
+                is een vaste cel; met 'naam' en 'maak' (functie die het
+                invoerveld maakt) erbij is de cel klik-bewerkbaar, en zet
+                'nadien' een tekstje achter het invoerveld (bv. " min")
+     opslaan  — async (invoer) => ...; 'invoer' heeft per 'naam' het
+                invoerveld; daarna wordt herladen
+     verwijder — async () => ...; daarna wordt herladen
+     herlaad  — laadt de tabel opnieuw (ook gebruikt voor Esc)
+     melding  — id van het meldingsvak voor foutteksten */
+function bewerkbareRij({ cellen, opslaan, verwijder, herlaad, melding }) {
+  const knop = el("button", { class: "klein", title: "Verwijder" }, "×");
+  let invoer = null;   // {naam: invoerveld} zodra de rij bewerkt wordt
+
+  async function bewaar() {
+    try {
+      await opslaan(invoer);
+      herlaad();
+    } catch (fout) { toonMelding(melding, fout.message); }
+  }
+
+  function startBewerken(focusNaam) {
+    if (!invoer) {
+      invoer = {};
+      for (const c of cellen) {
+        if (!c.maak) continue;
+        const veld = c.maak();
+        veld.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") { e.preventDefault(); bewaar(); }
+          if (e.key === "Escape") herlaad();   // annuleren = vers herladen
+        });
+        invoer[c.naam] = veld;
+        tds.get(c).replaceChildren(veld, c.nadien || "");
+      }
+      knop.textContent = "✓";
+      knop.title = "Opslaan";
+    }
+    invoer[focusNaam].focus();
+  }
+
+  // Per celbeschrijving de bijhorende td, zodat startBewerken de juiste
+  // cellen kan vervangen door invoervelden.
+  const tds = new Map(cellen.map((c) => [c, c.maak
+    ? el("td", { class: `${c.klasse || ""} klik-bewerk`, title: "Klik om te bewerken",
+                 onclick: () => startBewerken(c.naam) }, c.tekst)
+    : el("td", { class: c.klasse || "" }, c.tekst)]));
+
+  knop.addEventListener("click", async () => {
+    if (invoer) { bewaar(); return; }
+    try {
+      await verwijder();
+      herlaad();
+    } catch (fout) { toonMelding(melding, fout.message); }
+  });
+
+  return el("tr", {}, ...tds.values(), el("td", { class: "acties" }, knop));
+}
+
 /* ================= 2. Tabbladen ================= */
 
 // Wissel naar een tabblad en laad meteen de data ervan. De keuze komt ook in
@@ -151,6 +246,7 @@ function activeerTab(naam) {
   if (naam === "dagboek") laadDag();
   if (naam === "week") laadWeek();
   if (naam === "voedingsmiddelen") laadCatalogus();
+  if (naam === "gegevens") laadGegevens();
   if (naam === "instellingen") laadInstellingen();
 }
 
@@ -205,7 +301,9 @@ function nietteStappen(maxW, aantal = 5) {
                   zweefvenster
      vastBereik — {min, max}: dwing het y-bereik (voor de 'Alles'-weergave,
                   zodat de BMI-grenzen altijd in beeld zijn)
-     grenzen    — [{waarde, label}] rode grenslijnen met tekst (onder-/overgewicht) */
+     grenzen    — [{waarde, label}] rode grenslijnen met tekst (onder-/overgewicht)
+     bereik     — {van, tot}: het datumbereik van de x-as; zonder bereik loopt
+                  de as van het eerste tot het laatste punt */
 function lijnGrafiek(houder, punten, opties = {}) {
   houder.replaceChildren();
   if (!punten.length) {
@@ -213,9 +311,11 @@ function lijnGrafiek(houder, punten, opties = {}) {
     return;
   }
 
-  // Afmetingen: volle breedte van de kaart, vaste hoogte, marges voor de assen.
+  // Afmetingen: volle breedte van de kaart, vaste hoogte, marges voor de
+  // assen. De marges zijn in alle drie de grafieken gelijk, zodat de x-assen
+  // onder elkaar uitlijnen.
   const B = Math.max(houder.clientWidth, 320), H = 260;
-  const m = { l: 44, r: 56, t: 12, b: 28 };
+  const m = { l: 64, r: 56, t: 12, b: 28 };
   const bw = B - m.l - m.r, bh = H - m.t - m.b;
 
   // y-bereik: van net onder het minimum tot net boven het maximum, afgerond
@@ -234,10 +334,15 @@ function lijnGrafiek(houder, punten, opties = {}) {
   yMax = Math.ceil(yMax / stap) * stap;
   if (yMin === yMax) yMax += stap;
 
-  // Schalen: datum -> x-pixel (evenredig met de tijd), waarde -> y-pixel.
-  const t0 = naarDatum(punten[0].datum).getTime();
-  const t1 = naarDatum(punten[punten.length - 1].datum).getTime();
-  const xVan = (iso) => t1 === t0 ? bw / 2 : ((naarDatum(iso).getTime() - t0) / (t1 - t0)) * bw;
+  // Schalen: datum -> x-pixel, waarde -> y-pixel. De x-as werkt met één band
+  // per kalenderdag (net als de staafgrafieken) en elk punt staat in het
+  // midden van zijn dagband — zo staat een meting recht boven de staven van
+  // dezelfde dag in de andere grafieken.
+  const bereik = opties.bereik || { van: punten[0].datum, tot: punten[punten.length - 1].datum };
+  const t0 = naarDatum(bereik.van).getTime();
+  const nDagen = Math.round((naarDatum(bereik.tot).getTime() - t0) / DAG_MS) + 1;
+  const band = bw / nDagen;
+  const xVan = (iso) => ((naarDatum(iso).getTime() - t0) / DAG_MS + 0.5) * band;
   const yVan = (w) => bh - ((w - yMin) / (yMax - yMin)) * bh;
 
   const svg = svgEl("svg", { viewBox: `0 0 ${B} ${H}`, width: B, height: H });
@@ -276,13 +381,14 @@ function lijnGrafiek(houder, punten, opties = {}) {
   }
   g.append(svgEl("line", { x1: 0, x2: bw, y1: bh, y2: bh, class: "aslijn" }));
 
-  // Maximaal 6 datumlabels op de x-as, gelijkmatig verdeeld.
-  const tickAantal = Math.min(6, punten.length);
+  // Maximaal 6 datumlabels op de x-as, gelijkmatig over het bereik verdeeld —
+  // dezelfde formule als in de staafgrafieken, zodat de labels uitlijnen.
+  const tickAantal = Math.min(6, nDagen);
   for (let i = 0; i < tickAantal; i++) {
-    const p = punten[Math.round((i * (punten.length - 1)) / Math.max(tickAantal - 1, 1))];
+    const idx = Math.round((i * (nDagen - 1)) / Math.max(tickAantal - 1, 1));
     g.append(svgEl("text", {
-      x: xVan(p.datum), y: bh + 18, "text-anchor": "middle", class: "astekst",
-    }, datumKort(p.datum)));
+      x: (idx + 0.5) * band, y: bh + 18, "text-anchor": "middle", class: "astekst",
+    }, datumKort(plusDagen(bereik.van, idx))));
   }
 
   // Doellijn (gestippeld, gedempt) met label rechts.
@@ -362,7 +468,9 @@ function lijnGrafiek(houder, punten, opties = {}) {
      maxLijn / maxLabel — horizontale richtlijn boven (bv. max 2.600 kcal)
      minLijn / minLabel — horizontale richtlijn onder (bv. min 1.800 kcal)
      kleurVan           — functie waarde -> kleur, om elke staaf te kleuren
-                          naargelang de waarde (anders de standaardblauw) */
+                          naargelang de waarde (anders de standaardblauw)
+     bijKlik            — functie (punt) => ...; maakt elke dagband klikbaar
+                          (handwijzer + hintregel in het zweefvenster) */
 function staafGrafiek(houder, punten, opties = {}) {
   houder.replaceChildren();
   if (!punten.length) {
@@ -370,13 +478,15 @@ function staafGrafiek(houder, punten, opties = {}) {
     return;
   }
   const B = Math.max(houder.clientWidth, 320), H = 260;
-  const m = { l: 48, r: 56, t: 12, b: 28 };
+  const m = { l: 64, r: 56, t: 12, b: 28 };   // zelfde marges in alle grafieken
   const bw = B - m.l - m.r, bh = H - m.t - m.b;
 
-  // y-as begint bij staven altijd op 0 (anders liegt de staafhoogte).
-  let yMax = Math.max(...punten.map((p) => p.waarde), opties.maxLijn || 0);
+  // y-as begint bij staven altijd op 0 (anders liegt de staafhoogte). De top
+  // ligt vlak boven de hoogste staaf (of de richtlijn): maximum + 200 kcal,
+  // zodat er geen lap lege ruimte boven de grafiek gaapt. De gridlijnen
+  // blijven wel op ronde getallen staan.
+  const yMax = Math.max(...punten.map((p) => p.waarde), opties.maxLijn || 0) + 200;
   const stap = nietteStappen(yMax, 5);
-  yMax = Math.ceil(yMax / stap) * stap || stap;
   const yVan = (w) => bh - (w / yMax) * bh;
 
   // Elke dag krijgt een 'band'; de staaf is maximaal 24px dik en laat
@@ -430,12 +540,17 @@ function staafGrafiek(houder, punten, opties = {}) {
 
     // Onzichtbaar aanwijsvlak over de volledige band(hoogte): veel makkelijker
     // te raken dan een dun staafje. Bij hover licht de staaf op en verschijnt
-    // het zweefvenster.
+    // het zweefvenster; met 'bijKlik' is de band ook klikbaar (handwijzer).
     const hit = svgEl("rect", { x: i * band, y: 0, width: band, height: bh, fill: "transparent" });
+    if (opties.bijKlik) {
+      hit.setAttribute("cursor", "pointer");
+      hit.addEventListener("click", () => opties.bijKlik(p));
+    }
     hit.addEventListener("pointermove", (e) => {
       staaf.setAttribute("opacity", "0.75");
       const regels = [[`${fmt0.format(p.waarde)} kcal`, "zw-waarde"], [datumLang(p.datum), "zw-label"]];
       if (p.detail) regels.push([p.detail, "zw-label"]);
+      if (opties.bijKlik) regels.push(["klik voor het dagboek", "zw-label"]);
       toonZweefinfo(e.clientX, e.clientY, regels);
     });
     hit.addEventListener("pointerleave", () => {
@@ -482,7 +597,7 @@ function sportGrafiek(houder, dagen) {
     return;
   }
   const B = Math.max(houder.clientWidth, 320), H = 220;
-  const m = { l: 64, r: 56, t: 12, b: 28 };   // links breder: "120 min"-labels
+  const m = { l: 64, r: 56, t: 12, b: 28 };   // zelfde marges in alle grafieken
   const bw = B - m.l - m.r, bh = H - m.t - m.b;
 
   // Per dag de minuten optellen per type (meerdere activiteiten kunnen).
@@ -582,13 +697,13 @@ function sportGrafiek(houder, dagen) {
 /* ================= 4. Dashboard ================= */
 
 let instellingen = {};   // doelgewicht, lengte, richtlijnen — geladen bij start
-let filterDagen = 0;     // actieve periodefilter (0 = alles, de standaard)
+let filterDagen = 0;     // actieve periodefilter (0 = alles, "jaar" = sinds 1 januari)
 
 // Periodeknoppen: één filterrij die alles op het dashboard herschaalt.
 document.getElementById("bereikfilters").addEventListener("click", (e) => {
   const knop = e.target.closest("button");
   if (!knop) return;
-  filterDagen = Number(knop.dataset.dagen);
+  filterDagen = knop.dataset.dagen === "jaar" ? "jaar" : Number(knop.dataset.dagen);
   document.querySelectorAll("#bereikfilters button").forEach((b) =>
     b.classList.toggle("actief", b === knop));
   laadDashboard();
@@ -620,7 +735,8 @@ async function laadDashboard() {
   // gemiddelden, kleuren en grafieken scheeftrekken. De periode "laatste 7
   // dagen" betekent dus: de 7 volledige dagen t/m gisteren.
   const einde = plusDagen(vandaag(), -1);
-  const van = filterDagen ? plusDagen(einde, -filterDagen + 1) : "0001-01-01";
+  const van = filterDagen === "jaar" ? `${new Date().getFullYear()}-01-01`
+    : filterDagen ? plusDagen(einde, -filterDagen + 1) : "0001-01-01";
 
   // Gewichten en dagtotalen parallel ophalen.
   const [gewichten, dagen] = await Promise.all([
@@ -692,8 +808,11 @@ async function laadDashboard() {
   // het gemiddelde per week. De kleur volgt de WHO-richtlijn van 150–300
   // minuten beweging per week (>= 150 groen, 75–150 amber, minder rood).
   const sportMin = dagen.reduce((s, d) => s + d.sport.reduce((t, a) => t + a.duur_minuten, 0), 0);
-  const periodeDagen = filterDagen ||
-    (dagen.length ? Math.round((naarDatum(einde) - naarDatum(dagen[0].datum)) / DAG_MS) + 1 : 1);
+  // Aantal dagen in de periode: vast bij een dagenfilter, sinds 1 januari bij
+  // "van begin jaar", en anders (Alles) sinds de eerste dag met gegevens.
+  const periodeStart = filterDagen === "jaar" ? van : dagen.length ? dagen[0].datum : null;
+  const periodeDagen = typeof filterDagen === "number" && filterDagen ? filterDagen
+    : periodeStart ? Math.round((naarDatum(einde) - naarDatum(periodeStart)) / DAG_MS) + 1 : 1;
   const minPerDag = sportMin / periodeDagen;
   const minPerWeek = minPerDag * 7;
   const sportKleur = minPerWeek >= 150 ? "var(--goed)" : minPerWeek >= 75 ? "var(--onder-min)" : "var(--slecht)";
@@ -701,6 +820,26 @@ async function laadDashboard() {
     el("div", { class: "label" }, "Sport"),
     el("div", { class: "waarde", style: `color:${sportKleur}` }, `${fmt0.format(minPerDag)} min/dag`),
     el("div", { class: "delta" }, `${fmt0.format(minPerWeek)} min/week`)));
+
+  /* --- gedeelde x-as voor de drie grafieken ---
+     Alle grafieken krijgen hetzelfde datumbereik en één band per kalenderdag,
+     zodat dezelfde datum overal recht onder elkaar staat en je waardes
+     verticaal kunt vergelijken. Het bereik loopt van het begin van de periode
+     (bij 'Alles': de eerste dag met gegevens) tot gisteren, of tot vandaag
+     als er vandaag al gewogen is (die meting telt immers mee). */
+  const laatsteMeting = gewichtBereik[gewichtBereik.length - 1];
+  const domeinTot = laatsteMeting && laatsteMeting.datum > einde ? laatsteMeting.datum : einde;
+  const eersteData = [gewichtBereik[0] && gewichtBereik[0].datum,
+                      dagen[0] && dagen[0].datum].filter(Boolean).sort()[0];
+  const bereik = { van: filterDagen ? van : (eersteData || domeinTot), tot: domeinTot };
+
+  // De dagenlijst van de API bevat alleen dagen mét gegevens; hier vullen we
+  // de gaten op met lege dagen zodat elke kalenderdag exact één band inneemt.
+  const dagPerDatum = Object.fromEntries(dagen.map((d) => [d.datum, d]));
+  const alleDagen = [];
+  for (let d = bereik.van; d <= bereik.tot; d = plusDagen(d, 1)) {
+    alleDagen.push(dagPerDatum[d] || { datum: d, kcal: 0, sport: [] });
+  }
 
   /* --- gewichtsgrafiek met BMI-zones op de achtergrond --- */
   // De BMI-schaal wordt omgerekend naar kilogram via gewicht = BMI × lengte².
@@ -720,10 +859,10 @@ async function laadDashboard() {
     zones.push({ van: kg(BMI_BOVEN), tot: kg(BMI_BOVEN) + 100, kleur: BMI_BUITEN, opaciteit: 0.5 });
     zones.push({ van: kg(BMI_ONDER) - 100, tot: kg(BMI_ONDER), kleur: BMI_BUITEN, opaciteit: 0.5 });
 
-    // Bij 'Alles' zoomen we uit tot de volledige gezonde BMI-schaal, met de
-    // grenslijnen naar onder- en overgewicht in beeld. Bij kortere periodes
-    // blijft de grafiek strak inzoomen op de metingen zelf.
-    if (filterDagen === 0) {
+    // Bij 'Alles' en 'Van begin jaar' zoomen we uit tot de volledige gezonde
+    // BMI-schaal, met de grenslijnen naar onder- en overgewicht in beeld. Bij
+    // kortere periodes blijft de grafiek strak inzoomen op de metingen zelf.
+    if (filterDagen === 0 || filterDagen === "jaar") {
       vastBereik = { min: kg(BMI_ONDER) - 2, max: kg(BMI_BOVEN) + 2 };
       grenzen = [
         { waarde: kg(BMI_ONDER), label: `ondergewicht — BMI ${fmt.format(BMI_ONDER)} (${fmt.format(kg(BMI_ONDER))} kg)` },
@@ -738,7 +877,7 @@ async function laadDashboard() {
   lijnGrafiek(document.getElementById("grafiek-gewicht"),
     gewichtBereik.map((g) => ({ datum: g.datum, waarde: g.gewicht })),
     { doel, doelLabel: doel ? `doel ${fmt.format(doel)}` : "", eenheid: "kg",
-      zones, lengte, vastBereik, grenzen });
+      zones, lengte, vastBereik, grenzen, bereik });
 
   /* --- kcal-grafiek: staafkleur volgens de richtlijn --- */
   const kcalMin = instellingen.kcal_min, kcalMax = instellingen.kcal_max;
@@ -749,15 +888,29 @@ async function laadDashboard() {
     if (kcalMin != null && w < kcalMin) return "#fab219";
     return "#0ca30c";
   };
+  // De subtitel meldt de correctie, anders lijkt de grafiek het dagboek
+  // (dat de ruwe logwaarden toont) tegen te spreken.
+  const onderrapportagePct = instellingen.onderrapportage_pct || 0;
+  document.getElementById("kcal-subtitel").textContent =
+    (onderrapportagePct
+      ? `kcal per dag incl. ${fmt.format(onderrapportagePct)}% onderrapportage`
+      : "kcal gegeten per dag") + ", gekleurd t.o.v. de richtlijn";
   staafGrafiek(document.getElementById("grafiek-kcal"),
-    dagen.map((d) => ({
-      datum: d.datum, waarde: d.kcal,
+    alleDagen.map((d) => ({
+      datum: d.datum, waarde: metOnderrapportage(d.kcal),
       detail: d.sport.map(sportTekst).join(" · "),  // sport in het zweefvenster
     })),
     {
       kleurVan: kcalMin != null || kcalMax != null ? kcalKleur : null,
       maxLijn: kcalMax, maxLabel: kcalMax ? `max ${fmt0.format(kcalMax)}` : "",
       minLijn: kcalMin, minLabel: kcalMin ? `min ${fmt0.format(kcalMin)}` : "",
+      // Klik op een staaf = het dagboek van die dag openen (zelfde gedrag
+      // als een dagrij in het weekoverzicht, incl. bookmarkbare hash).
+      bijKlik: (p) => {
+        dagInvoer.value = p.datum;
+        activeerTab("dagboek");
+        location.hash = `dagboek/${p.datum}`;
+      },
     });
 
   // Legende bij de kcal-grafiek (kleur draagt hier betekenis).
@@ -767,7 +920,7 @@ async function laadDashboard() {
         el("span", { class: "vlak", style: `background:${kleur}` }), label)));
 
   /* --- sportgrafiek: minuten per dag, kleur per type --- */
-  sportGrafiek(document.getElementById("grafiek-sport"), dagen);
+  sportGrafiek(document.getElementById("grafiek-sport"), alleDagen);
 
   // Legende: alleen de types die in deze periode voorkomen, met hun vaste
   // kleur (een type behoudt altijd dezelfde kleur).
@@ -850,11 +1003,7 @@ async function laadDag() {
 
       async function opslaan() {
         try {
-          await api(`/api/voedingslog/${r.id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ hoeveelheid: veldHoev.value, uur: veldUur.value }),
-          });
+          await put(`/api/voedingslog/${r.id}`, { hoeveelheid: veldHoev.value, uur: veldUur.value });
           laadDag();   // herladen ververst ook het dagtotaal
         } catch (fout) { toonMelding("melding-voeding", fout.message); }
       }
@@ -927,26 +1076,31 @@ async function laadDag() {
       el("tbody", {}, ...rijen, totaal, doelen)));
   }
 
-  /* --- sport van de dag --- */
+  /* --- sport van de dag ---
+     Duur en snelheid bewerk je door erop te klikken (zelfde rijgedrag als
+     de voedingstabel); het × verwijdert de activiteit. */
   const sportHouder = document.getElementById("dag-sport");
   sportHouder.replaceChildren(
     dag.sport.length
-      ? el("table", {}, el("tbody", {}, ...dag.sport.map((s) => el("tr", {},
-          el("td", {}, sportTekst(s)),
-          el("td", {}, el("button", {
-            class: "klein",
-            onclick: async () => {
-              await api(`/api/sport/${s.id}`, { method: "DELETE" });
-              laadDag();
-            },
-          }, "×"))))))
+      ? el("table", {}, el("tbody", {}, ...dag.sport.map((s) =>
+          sportRij(s, laadDag, "melding-sport", [{ tekst: s.type }]))))
       : el("p", { class: "subtitel" }, "Geen sport op deze dag."));
 
-  /* --- gewichtmeting van de dag --- */
+  /* --- gewichtmeting van de dag ---
+     Klikken op de meting zet de cursor in het invoerveld eronder (de waarde
+     staat er al in); opslaan overschrijft de meting van deze datum. */
   const gewichten = await api("/api/gewicht");
   const meting = gewichten.find((g) => g.datum === datum);
-  document.getElementById("dag-gewicht-huidig").textContent =
+  const metingTekst = document.getElementById("dag-gewicht-huidig");
+  metingTekst.textContent =
     meting ? `Gemeten op ${datumKort(datum)}: ${fmt.format(meting.gewicht)} kg` : "Nog geen meting op deze dag.";
+  metingTekst.classList.toggle("klik-bewerk", !!meting);
+  metingTekst.title = meting ? "Klik om te bewerken" : "";
+  metingTekst.onclick = meting ? () => {
+    const veld = document.getElementById("gewicht-kg");
+    veld.focus();
+    veld.select();
+  } : null;
   if (meting) document.getElementById("gewicht-kg").value = meting.gewicht;
 }
 
@@ -1127,8 +1281,10 @@ async function laadWeek() {
   const weekKcal = som.kcal;
   const gemiddelde = el("tr", { class: "totaalrij" },
     el("td", {}, "Gemiddelde per dag"), el("td", {}),
+    // Alleen de kcal in deze rij krijgt de onderrapportage-correctie;
+    // de dagrijen erboven en de andere nutriënten blijven ruwe logwaarden.
     ...NUTRIENTEN.map((k) =>
-      dagenMetEten ? nutrientCel(k, som[k] / dagenMetEten, fmt0, false)
+      dagenMetEten ? nutrientCel(k, (k === "kcal" ? metOnderrapportage(som[k]) : som[k]) / dagenMetEten, fmt0, false)
                    : el("td", { class: "getal" }, "")),
     dagenMetEten ? novaCel({ 1: novaSom[1], 2: novaSom[2], 3: novaSom[3], 4: novaSom[4] }, weekKcal)
                  : el("td", {}),
@@ -1236,11 +1392,7 @@ document.getElementById("form-catalogus").addEventListener("submit", async (e) =
   for (const k of NUTRIENTEN) gegevens[k] = document.getElementById("cat-" + k).value;
   try {
     if (id) {
-      await api(`/api/voedingsmiddelen/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(gegevens),
-      });
+      await put(`/api/voedingsmiddelen/${id}`, gegevens);
       toonMelding("melding-catalogus", "Opgeslagen.", true);
     } else {
       await post("/api/voedingsmiddelen", gegevens);
@@ -1251,7 +1403,106 @@ document.getElementById("form-catalogus").addEventListener("submit", async (e) =
   } catch (fout) { toonMelding("melding-catalogus", fout.message); }
 });
 
-/* ================= 8. Instellingen ================= */
+/* ================= 8. Gegevens ================= */
+
+/* Rechtstreeks bewerken van de databank: alle gewichtmetingen en alle
+   sportactiviteiten, nieuwste bovenaan. Waarden bewerk je door erop te
+   klikken (zelfde rijgedrag als in het dagboek); de formulieren bovenaan
+   voegen nieuwe rijen toe. Voeding bewerk je in het dagboek. */
+
+async function laadGegevens() {
+  // Datumvelden van de invoerformulieren standaard op vandaag.
+  for (const id of ["geg-gewicht-datum", "geg-sport-datum"]) {
+    const veld = document.getElementById(id);
+    if (!veld.value) veld.value = vandaag();
+  }
+
+  const [gewichten, sport] = await Promise.all([api("/api/gewicht"), api("/api/sport")]);
+
+  /* --- gewichtmetingen (nieuwste eerst; de API sorteert oplopend) --- */
+  document.getElementById("geg-gewicht-tabel").replaceChildren(el("table", {},
+    el("thead", {}, el("tr", {},
+      el("th", {}, "Datum"), el("th", { class: "getal" }, "Gewicht"), el("th", {}))),
+    el("tbody", {}, ...[...gewichten].reverse().map((g) => bewerkbareRij({
+      cellen: [
+        { naam: "datum", tekst: g.datum, klasse: "gedempt",
+          maak: () => el("input", { type: "date", value: g.datum }) },
+        { naam: "gewicht", tekst: `${fmt.format(g.gewicht)} kg`, klasse: "getal", nadien: " kg",
+          maak: () => el("input", { type: "number", step: "0.1", min: 1, value: g.gewicht, style: "width:80px" }) },
+      ],
+      opslaan: (invoer) => put(`/api/gewicht/${g.id}`, {
+        datum: invoer.datum.value, gewicht: invoer.gewicht.value,
+      }),
+      verwijder: () => api(`/api/gewicht/${g.id}`, { method: "DELETE" }),
+      herlaad: laadGegevens,
+      melding: "melding-geg-gewicht",
+    })))));
+
+  /* --- sportactiviteiten --- */
+  document.getElementById("geg-sport-tabel").replaceChildren(el("table", {},
+    el("thead", {}, el("tr", {},
+      el("th", {}, "Datum"), el("th", {}, "Type"),
+      el("th", { class: "getal" }, "Duur"), el("th", { class: "getal" }, "Snelheid"), el("th", {}))),
+    el("tbody", {}, ...sport.map((s) => sportRij(s, laadGegevens, "melding-geg-sport", [
+      { naam: "datum", tekst: s.datum, klasse: "gedempt",
+        maak: () => el("input", { type: "date", value: s.datum }) },
+      { tekst: s.type },
+    ])))));
+}
+
+// Eén bewerkbare sportrij (duur + snelheid); gedeeld tussen het
+// Gegevens-tabblad en het dagboek. 'voorCellen' bepaalt wat er vóór de
+// duur- en snelheidscel staat: hier een bewerkbare datum + het type, in
+// het dagboek alleen het type (daar ligt de dag al vast).
+function sportRij(s, herlaad, melding, voorCellen) {
+  return bewerkbareRij({
+    cellen: [
+      ...voorCellen,
+      { naam: "duur", tekst: `${fmt0.format(s.duur_minuten)} min`, klasse: "getal", nadien: " min",
+        maak: () => el("input", { type: "number", min: 1, step: 1, value: s.duur_minuten, style: "width:70px" }) },
+      { naam: "snelheid", tekst: s.snelheid_kmh ? `${fmt.format(s.snelheid_kmh)} km/u` : "–", klasse: "getal", nadien: " km/u",
+        maak: () => el("input", { type: "number", min: 0.1, step: "any", value: s.snelheid_kmh ?? "", style: "width:80px" }) },
+    ],
+    // Zonder datumcel (dagboek) blijft de datum staan; de API laat 'm dan weg.
+    opslaan: (invoer) => put(`/api/sport/${s.id}`, {
+      datum: invoer.datum ? invoer.datum.value : "",
+      duur_minuten: invoer.duur.value, snelheid_kmh: invoer.snelheid.value,
+    }),
+    verwijder: () => api(`/api/sport/${s.id}`, { method: "DELETE" }),
+    herlaad, melding,
+  });
+}
+
+// Formulier: gewichtmeting toevoegen (of overschrijven op dezelfde datum).
+document.getElementById("form-geg-gewicht").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await post("/api/gewicht", {
+      datum: document.getElementById("geg-gewicht-datum").value,
+      gewicht: document.getElementById("geg-gewicht-kg").value,
+    });
+    document.getElementById("geg-gewicht-kg").value = "";
+    toonMelding("melding-geg-gewicht", "Opgeslagen.", true);
+    laadGegevens();
+  } catch (fout) { toonMelding("melding-geg-gewicht", fout.message); }
+});
+
+// Formulier: sportactiviteit toevoegen (snelheid is optioneel).
+document.getElementById("form-geg-sport").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await post("/api/sport", {
+      datum: document.getElementById("geg-sport-datum").value,
+      type: document.getElementById("geg-sport-type").value,
+      duur_minuten: document.getElementById("geg-sport-duur").value,
+      snelheid_kmh: document.getElementById("geg-sport-snelheid").value,
+    });
+    toonMelding("melding-geg-sport", "Toegevoegd.", true);
+    laadGegevens();
+  } catch (fout) { toonMelding("melding-geg-sport", fout.message); }
+});
+
+/* ================= 9. Instellingen ================= */
 
 /* Het Instellingen-tabblad toont alle configuratie uit de tabel
    'instellingen' (vroeger het blok naast de gewichten in het rekenblad) en
@@ -1379,17 +1630,13 @@ document.getElementById("form-instellingen").addEventListener("submit", async (e
     if (veld && veld.value !== "") gegevens[sleutel] = veld.value;
   }
   try {
-    instellingen = await api("/api/instellingen", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(gegevens),
-    });
+    instellingen = await put("/api/instellingen", gegevens);
     pasKleurenToe();   // gekozen kleuren meteen zichtbaar maken
     toonMelding("melding-instellingen", "Opgeslagen.", true);
   } catch (fout) { toonMelding("melding-instellingen", fout.message); }
 });
 
-/* ================= 9. Opstarten ================= */
+/* ================= 10. Opstarten ================= */
 
 // Grafieken passen zich aan de vensterbreedte aan: bij het verkleinen of
 // vergroten van het venster tekenen we het dashboard opnieuw (met een kleine
@@ -1408,10 +1655,10 @@ window.addEventListener("resize", () => {
   pasKleurenToe();   // bewaarde kleurkeuzes als CSS-variabelen zetten
   await zorgCatalogus();
 
-  // ?dagen=30 in de URL kiest de periode vooraf (0 = alles).
+  // ?dagen=30 in de URL kiest de periode vooraf (0 = alles, jaar = sinds 1 januari).
   const dagenParam = new URLSearchParams(location.search).get("dagen");
-  if (dagenParam !== null && !Number.isNaN(Number(dagenParam))) {
-    filterDagen = Number(dagenParam);
+  if (dagenParam === "jaar" || (dagenParam !== null && !Number.isNaN(Number(dagenParam)))) {
+    filterDagen = dagenParam === "jaar" ? "jaar" : Number(dagenParam);
     document.querySelectorAll("#bereikfilters button").forEach((b) =>
       b.classList.toggle("actief", b.dataset.dagen === dagenParam));
   }
@@ -1420,5 +1667,5 @@ window.addEventListener("resize", () => {
   // (dagboek kan met een datum, zodat je een specifieke dag kunt bookmarken).
   const [tab, datum] = location.hash.slice(1).split("/");
   if (tab === "dagboek" && datum && /^\d{4}-\d{2}-\d{2}$/.test(datum)) dagInvoer.value = datum;
-  activeerTab(["dagboek", "week", "voedingsmiddelen", "instellingen"].includes(tab) ? tab : "dashboard");
+  activeerTab(["dagboek", "week", "voedingsmiddelen", "gegevens", "instellingen"].includes(tab) ? tab : "dashboard");
 })();

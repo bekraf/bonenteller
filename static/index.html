@@ -20,6 +20,7 @@
     <button data-paneel="dagboek">Dagboek</button>
     <button data-paneel="week">Weekoverzicht</button>
     <button data-paneel="voedingsmiddelen">Voedingsmiddelen</button>
+    <button data-paneel="gegevens">Gegevens</button>
     <button data-paneel="instellingen">Instellingen</button>
   </nav>
 </header>
@@ -37,7 +38,7 @@
       <button data-dagen="14">Laatste 14 dagen</button>
       <button data-dagen="30">Laatste 30 dagen</button>
       <button data-dagen="90">Laatste 90 dagen</button>
-      <button data-dagen="180">Laatste 180 dagen</button>
+      <button data-dagen="jaar">Van begin jaar</button>
       <button data-dagen="0" class="actief">Alles</button>
     </div>
 
@@ -157,6 +158,47 @@
     </div>
     <div class="kaart">
       <div id="week-tabel"></div>
+    </div>
+  </section>
+
+  <!-- ================= GEGEVENS ================= -->
+  <!-- Rechtstreeks bewerken van de databank: gewichtmetingen en
+       sportactiviteiten. Voeding bewerk je in het dagboek. -->
+  <section id="paneel-gegevens" class="paneel">
+    <div class="kolommen">
+
+      <div class="kaart">
+        <h2>Gewichtmetingen</h2>
+        <p class="subtitel">klik op een datum of gewicht om te bewerken — toevoegen op een bestaande datum overschrijft die meting</p>
+        <form class="regel" id="form-geg-gewicht">
+          <label>Datum <input type="date" id="geg-gewicht-datum" required></label>
+          <label>Gewicht (kg) <input type="number" id="geg-gewicht-kg" step="0.1" min="1" required></label>
+          <button class="primair" type="submit">Toevoegen</button>
+        </form>
+        <p class="melding" id="melding-geg-gewicht"></p>
+        <div id="geg-gewicht-tabel"></div>
+      </div>
+
+      <div class="kaart">
+        <h2>Sportactiviteiten</h2>
+        <p class="subtitel">klik op datum, duur of snelheid om te bewerken</p>
+        <form class="regel" id="form-geg-sport">
+          <label>Datum <input type="date" id="geg-sport-datum" required></label>
+          <label>Type
+            <select id="geg-sport-type">
+              <option value="lopen">lopen</option>
+              <option value="fietsen">fietsen</option>
+              <option value="krachttraining">krachttraining</option>
+            </select>
+          </label>
+          <label>Duur (min) <input type="number" id="geg-sport-duur" min="1" step="1" value="60"></label>
+          <label>Snelheid (km/u) <input type="number" id="geg-sport-snelheid" min="0.1" step="any" placeholder="optioneel"></label>
+          <button class="primair" type="submit">Toevoegen</button>
+        </form>
+        <p class="melding" id="melding-geg-sport"></p>
+        <div id="geg-sport-tabel"></div>
+      </div>
+
     </div>
   </section>
 

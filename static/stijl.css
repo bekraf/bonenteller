@@ -205,9 +205,10 @@ td.getal, th.getal { text-align: right; font-variant-numeric: tabular-nums; }
 tr.klikbaar { cursor: pointer; }
 tr.klikbaar:hover td { background: rgba(137, 56, 15, 0.3); }
 
-/* Klikbare cellen (dagboek: uur/hoeveelheid bewerken door erop te klikken) */
-td.klik-bewerk { cursor: pointer; }
-td.klik-bewerk:hover { color: var(--inkt); text-decoration: underline dotted; }
+/* Klikbaar-bewerkbare waarden (cellen in dagboek/gegevens, de gewichtmeting
+   in het dagboek): bewerken door erop te klikken */
+.klik-bewerk { cursor: pointer; }
+.klik-bewerk:hover { color: var(--inkt); text-decoration: underline dotted; }
 tr.totaalrij td { font-weight: 600; border-top: 1px solid var(--aslijn); }
 tr.doelrij td { color: var(--gedempt); font-size: 12px; border-bottom: none; }
 td.gedempt { color: var(--gedempt); }
