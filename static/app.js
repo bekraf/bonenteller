@@ -452,7 +452,9 @@ function lijnGrafiek(houder, punten, opties = {}) {
 
   // Maximaal 6 datumlabels op de x-as, gelijkmatig over het bereik verdeeld —
   // dezelfde formule als in de staafgrafieken, zodat de labels uitlijnen.
-  const tickAantal = Math.min(6, nDagen);
+  // Op smalle schermen (telefoon) passen er minder ISO-datums naast elkaar:
+  // reken op ±80px per label. Op desktopbreedte blijft dit gewoon 6.
+  const tickAantal = Math.min(6, nDagen, Math.max(2, Math.floor(bw / 80)));
   for (let i = 0; i < tickAantal; i++) {
     const idx = Math.round((i * (nDagen - 1)) / Math.max(tickAantal - 1, 1));
     g.append(svgEl("text", {
@@ -579,7 +581,7 @@ function staafGrafiek(houder, punten, opties = {}) {
   g.append(svgEl("line", { x1: 0, x2: bw, y1: bh, y2: bh, class: "aslijn" }));
 
   // Maximaal 6 datumlabels op de x-as.
-  const tickAantal = Math.min(6, punten.length);
+  const tickAantal = Math.min(6, punten.length, Math.max(2, Math.floor(bw / 80)));
   for (let i = 0; i < tickAantal; i++) {
     const idx = Math.round((i * (punten.length - 1)) / Math.max(tickAantal - 1, 1));
     g.append(svgEl("text", {
@@ -702,7 +704,7 @@ function sportGrafiek(houder, dagen) {
   g.append(svgEl("line", { x1: 0, x2: bw, y1: bh, y2: bh, class: "aslijn" }));
 
   // Datumlabels op de x-as (maximaal 6).
-  const tickAantal = Math.min(6, punten.length);
+  const tickAantal = Math.min(6, punten.length, Math.max(2, Math.floor(bw / 80)));
   for (let i = 0; i < tickAantal; i++) {
     const idx = Math.round((i * (punten.length - 1)) / Math.max(tickAantal - 1, 1));
     g.append(svgEl("text", {
@@ -1168,8 +1170,6 @@ async function laadDag() {
   const gewichten = await api("/api/gewicht");
   const meting = gewichten.find((g) => g.datum === datum);
   const metingTekst = document.getElementById("dag-gewicht-huidig");
-  metingTekst.textContent =
-    meting ? `Gemeten op ${datumKort(datum)}: ${fmt.format(meting.gewicht)} kg` : "Nog geen meting op deze dag.";
   metingTekst.classList.toggle("klik-bewerk", !!meting);
   metingTekst.title = meting ? "Klik om te bewerken" : "";
   metingTekst.onclick = meting ? () => {
@@ -1177,7 +1177,24 @@ async function laadDag() {
     veld.focus();
     veld.select();
   } : null;
-  if (meting) document.getElementById("gewicht-kg").value = meting.gewicht;
+  if (meting) {
+    // ×-knop verwijdert de meting van deze dag. stopPropagation: anders zou
+    // de klik ook de klik-bewerk-handler op de tekst zelf triggeren.
+    const wisKnop = el("button", { class: "klein", title: "Verwijder meting" }, "×");
+    wisKnop.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      try {
+        await api(`/api/gewicht/${meting.id}`, { method: "DELETE" });
+        document.getElementById("gewicht-kg").value = "";
+        laadDag();
+      } catch (fout) { toonMelding("melding-gewicht", fout.message); }
+    });
+    metingTekst.replaceChildren(
+      `Gemeten op ${datumKort(datum)}: ${fmt.format(meting.gewicht)} kg `, wisKnop);
+    document.getElementById("gewicht-kg").value = meting.gewicht;
+  } else {
+    metingTekst.textContent = "Nog geen meting op deze dag.";
+  }
 }
 
 // Formulier: portie toevoegen uit de catalogus. De server rekent de
@@ -1742,9 +1759,14 @@ document.getElementById("form-instellingen").addEventListener("submit", async (e
 
 // Grafieken passen zich aan de vensterbreedte aan: bij het verkleinen of
 // vergroten van het venster tekenen we het dashboard opnieuw (met een kleine
-// vertraging zodat dit niet bij elke pixel gebeurt).
+// vertraging zodat dit niet bij elke pixel gebeurt). Alleen bij een échte
+// breedteverandering: op een telefoon verandert de hoogte ook zodra het
+// toetsenbord opent, en dan hoeft er niets hertekend te worden.
 let hertekenTimer;
+let hertekenBreedte = window.innerWidth;
 window.addEventListener("resize", () => {
+  if (window.innerWidth === hertekenBreedte) return;
+  hertekenBreedte = window.innerWidth;
   clearTimeout(hertekenTimer);
   hertekenTimer = setTimeout(() => {
     if (document.getElementById("paneel-dashboard").classList.contains("actief")) laadDashboard();

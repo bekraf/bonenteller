@@ -390,3 +390,50 @@ td.acties button + button { margin-left: 6px; }
 #inst-richtlijnen input { width: 90px; }
 
 .verborgen { display: none !important; }
+
+/* ===========================================================================
+   Smartphone-indeling — alles hieronder geldt alleen voor smalle schermen;
+   de desktopweergave blijft exact zoals ze is.
+   =========================================================================== */
+@media (max-width: 700px) {
+  /* Tabbladbalk: één regel die horizontaal meescrolt in plaats van
+     meerdere regels vol knoppen. */
+  header { padding: 6px 12px 0; }
+  nav {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  nav::-webkit-scrollbar { display: none; }
+  nav button { flex: 0 0 auto; white-space: nowrap; padding: 10px 10px; }
+
+  /* Smallere marges: op een telefoon telt elke pixel breedte. */
+  main { padding: 12px 10px 40px; }
+  .kaart { padding: 12px; }
+
+  /* Statustegels: twee per rij, iets compacter. */
+  .tegels { gap: 10px; }
+  .tegel { min-width: calc(50% - 5px); padding: 12px 14px; }
+  .tegel .waarde { font-size: 22px; }
+
+  /* Brede tabellen (weekoverzicht, catalogus, gegevens, dagboek) scrollen
+     horizontaal binnen hun kaart in plaats van de hele pagina op te rekken. */
+  #dag-voeding, #dag-sport, #week-tabel,
+  #geg-gewicht-tabel, #geg-sport-tabel, #cat-tabel {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Datums (2026-07-10) nooit over twee regels breken; de tabel scrolt
+     toch al horizontaal. */
+  td.gedempt { white-space: nowrap; }
+
+  /* iOS zoomt automatisch in op velden met tekst kleiner dan 16px;
+     voorkom dat door de invoervelden op 16px te zetten. */
+  input, select { font-size: 16px; }
+
+  /* Instellingen: label, veld en uitleg onder elkaar in plaats van in
+     drie kolommen. */
+  .inst-rij { grid-template-columns: 1fr; gap: 3px; padding: 8px 0; }
+}
