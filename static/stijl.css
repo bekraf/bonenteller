@@ -267,6 +267,34 @@ input:disabled, select:disabled { opacity: 0.55; }
 input[type="number"] { width: 90px; }
 input[type="date"] { width: 150px; }
 
+/* ISO-datumvelden (zie isoDatumveld in app.js): tekstveld in yyyy-mm-dd met
+   een kalenderknopje; de echte datumkiezer ligt onzichtbaar over het knopje
+   zodat de native kalender daar opengaat. */
+.datumgroep { display: inline-flex; gap: 6px; align-items: center; }
+.datumtekst { width: 110px; }
+.kalenderwrap { position: relative; display: inline-flex; }
+.kalenderknop {
+  font: inherit;
+  font-size: 14px;
+  background: var(--oppervlak);
+  border: 1px solid var(--rand);
+  border-radius: 8px;
+  padding: 5px 8px;
+  cursor: pointer;
+  color: var(--inkt-2);
+}
+.kalenderknop:hover { background: rgba(137, 56, 15, 0.35); }
+.kalenderkiezer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  border: 0;
+  padding: 0;
+}
+
 button.primair {
   font: inherit;
   font-size: 14px;

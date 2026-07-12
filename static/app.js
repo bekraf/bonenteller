@@ -105,17 +105,63 @@ function plusDagen(iso, n) {
   return isoDatum(d);
 }
 
-function datumKort(iso) {   // "3 jul"
-  return naarDatum(iso).toLocaleDateString("nl-BE", { day: "numeric", month: "short" });
+// Datums overal in ISO-notatie (yyyy-mm-dd), ook in labels en zweefvensters.
+function datumKort(iso) {   // "2026-07-03"
+  return iso;
 }
 
-function datumLang(iso) {   // "vrijdag 3 juli 2026"
-  return naarDatum(iso).toLocaleDateString("nl-BE", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric",
-  });
+function datumLang(iso) {   // "vrijdag 2026-07-03"
+  const weekdag = naarDatum(iso).toLocaleDateString("nl-BE", { weekday: "long" });
+  return `${weekdag} ${iso}`;
 }
 
 function vandaag() { return isoDatum(new Date()); }
+
+/* Datumvelden: een native <input type="date"> toont zijn waarde in het
+   formaat van de browserlocale (bv. 12/07/2026) en dat valt niet om te
+   zetten naar yyyy-mm-dd. Elk vast datumveld wordt daarom bij het opstarten
+   omgebouwd tot een tekstveld met de ISO-notatie, plus een kalenderknopje
+   dat de native kiezer van een verborgen date-veld opent. Het tekstveld
+   behoudt zijn id, dus code die .value leest/zet of op 'change' luistert
+   blijft gewoon werken. */
+function isoDatumveld(veld) {
+  veld.type = "text";
+  veld.placeholder = "yyyy-mm-dd";
+  veld.pattern = "\\d{4}-\\d{2}-\\d{2}";
+  veld.autocomplete = "off";
+  veld.classList.add("datumtekst");
+
+  // Ongeldige invoer terugdraaien naar de waarde die het veld had toen het
+  // focus kreeg. Deze listener is vóór alle andere geregistreerd, dus de
+  // rest van de code ziet altijd een geldige (genormaliseerde) datum.
+  let terugval = veld.value;
+  veld.addEventListener("focus", () => { terugval = veld.value; });
+  veld.addEventListener("change", () => {
+    veld.value = /^\d{4}-\d{2}-\d{2}$/.test(veld.value)
+      ? isoDatum(naarDatum(veld.value))   // normaliseert bv. 2026-02-31
+      : terugval;
+  });
+
+  // Het knopje opent de kalender van een onzichtbaar date-veld dat erover
+  // ligt (zo verschijnt de kalender op die plek); een keuze daarin stroomt
+  // als 'change' terug het tekstveld in.
+  const kiezer = el("input", { type: "date", class: "kalenderkiezer", tabindex: "-1", "aria-hidden": "true" });
+  const knop = el("button", { type: "button", class: "kalenderknop", title: "Kies een datum in de kalender" }, "📅");
+  knop.addEventListener("click", () => {
+    kiezer.value = /^\d{4}-\d{2}-\d{2}$/.test(veld.value) ? veld.value : vandaag();
+    try { kiezer.showPicker(); } catch { kiezer.focus(); }
+  });
+  kiezer.addEventListener("change", () => {
+    if (!kiezer.value) return;
+    veld.value = kiezer.value;
+    veld.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  const groep = el("span", { class: "datumgroep" });
+  veld.replaceWith(groep);
+  groep.append(veld, el("span", { class: "kalenderwrap" }, knop, kiezer));
+}
+document.querySelectorAll('input[type="date"]').forEach(isoDatumveld);
 
 // Toon een melding onder een formulier; verdwijnt vanzelf na 4 seconden.
 function toonMelding(id, tekst, ok = false) {
@@ -303,7 +349,11 @@ function nietteStappen(maxW, aantal = 5) {
                   zodat de BMI-grenzen altijd in beeld zijn)
      grenzen    — [{waarde, label}] rode grenslijnen met tekst (onder-/overgewicht)
      bereik     — {van, tot}: het datumbereik van de x-as; zonder bereik loopt
-                  de as van het eerste tot het laatste punt */
+                  de as van het eerste tot het laatste punt
+     vorige     — {datum, waarde}: laatste meting vóór 'bereik'; de lijn wordt
+                  vanaf de y-as doorgetrokken richting die (buiten beeld
+                  liggende) meting, zodat ze niet pas bij de eerste meting
+                  binnen beeld begint */
 function lijnGrafiek(houder, punten, opties = {}) {
   houder.replaceChildren();
   if (!punten.length) {
@@ -318,11 +368,32 @@ function lijnGrafiek(houder, punten, opties = {}) {
   const m = { l: 64, r: 56, t: 12, b: 28 };
   const bw = B - m.l - m.r, bh = H - m.t - m.b;
 
+  // Datumbereik van de x-as (al hier nodig: het instappunt op de y-as moet
+  // meetellen in het y-bereik).
+  const bereik = opties.bereik || { van: punten[0].datum, tot: punten[punten.length - 1].datum };
+  const t0 = naarDatum(bereik.van).getTime();
+
+  // Meting net vóór het bereik ('vorige'): bereken waar de lijn van die
+  // meting naar het eerste zichtbare punt de y-as snijdt. x = 0 komt overeen
+  // met een halve dag vóór het begin van het bereik (elk punt staat immers
+  // in het midden van zijn dagband).
+  let voorpunt = null;   // {waarde}: instapwaarde van de lijn op de y-as
+  if (opties.vorige) {
+    const tAs = t0 - 0.5 * DAG_MS;
+    const tV = naarDatum(opties.vorige.datum).getTime();
+    const tE = naarDatum(punten[0].datum).getTime();
+    if (tV < tAs && tAs < tE) {
+      const frac = (tAs - tV) / (tE - tV);
+      voorpunt = { waarde: opties.vorige.waarde + frac * (punten[0].waarde - opties.vorige.waarde) };
+    }
+  }
+
   // y-bereik: van net onder het minimum tot net boven het maximum, afgerond
   // op nette stappen. De doellijn telt mee zodat die altijd zichtbaar is.
   // Met 'vastBereik' (de 'Alles'-weergave) staat het bereik vast, zodat de
   // BMI-grenzen in beeld blijven ook al ligt het gewicht daar ver vandaan.
   const waarden = punten.map((p) => p.waarde);
+  if (voorpunt) waarden.push(voorpunt.waarde);
   const extra = opties.doel != null ? [opties.doel] : [];
   if (opties.vastBereik) {
     extra.push(opties.vastBereik.min, opties.vastBereik.max);
@@ -338,8 +409,6 @@ function lijnGrafiek(houder, punten, opties = {}) {
   // per kalenderdag (net als de staafgrafieken) en elk punt staat in het
   // midden van zijn dagband — zo staat een meting recht boven de staven van
   // dezelfde dag in de andere grafieken.
-  const bereik = opties.bereik || { van: punten[0].datum, tot: punten[punten.length - 1].datum };
-  const t0 = naarDatum(bereik.van).getTime();
   const nDagen = Math.round((naarDatum(bereik.tot).getTime() - t0) / DAG_MS) + 1;
   const band = bw / nDagen;
   const xVan = (iso) => ((naarDatum(iso).getTime() - t0) / DAG_MS + 0.5) * band;
@@ -398,8 +467,11 @@ function lijnGrafiek(houder, punten, opties = {}) {
     g.append(svgEl("text", { x: bw + 6, y: y + 4, class: "doeltekst" }, opties.doelLabel || ""));
   }
 
-  // De datalijn zelf: 2px, ronde hoeken/uiteinden.
-  const pad = punten.map((p, i) => `${i ? "L" : "M"}${xVan(p.datum).toFixed(1)},${yVan(p.waarde).toFixed(1)}`).join("");
+  // De datalijn zelf: 2px, ronde hoeken/uiteinden. Met een 'vorige'-meting
+  // begint de lijn op de y-as (het snijpunt richting die meting) in plaats
+  // van pas bij het eerste punt.
+  let pad = punten.map((p, i) => `${i ? "L" : "M"}${xVan(p.datum).toFixed(1)},${yVan(p.waarde).toFixed(1)}`).join("");
+  if (voorpunt) pad = `M0,${yVan(voorpunt.waarde).toFixed(1)}L` + pad.slice(1);
   g.append(svgEl("path", {
     d: pad, fill: "none", stroke: "var(--reeks-1)", "stroke-width": 2,
     "stroke-linejoin": "round", "stroke-linecap": "round",
@@ -874,10 +946,14 @@ async function laadDashboard() {
   document.getElementById("gewicht-subtitel").textContent =
     (doel ? `kg per meting, doellijn op ${fmt.format(doel)} kg` : "kg per meting") +
     " — achtergrond = BMI-zones (groen in het midden, donkerrood buiten 18,5–24,9)";
+  // Laatste meting vóór de periode: daarmee trekt de grafiek de lijn door
+  // tot de y-as in plaats van pas bij de eerste meting binnen beeld.
+  const vorigeMeting = gewichten.filter((g) => g.datum < van).at(-1);
   lijnGrafiek(document.getElementById("grafiek-gewicht"),
     gewichtBereik.map((g) => ({ datum: g.datum, waarde: g.gewicht })),
     { doel, doelLabel: doel ? `doel ${fmt.format(doel)}` : "", eenheid: "kg",
-      zones, lengte, vastBereik, grenzen, bereik });
+      zones, lengte, vastBereik, grenzen, bereik,
+      vorige: vorigeMeting && { datum: vorigeMeting.datum, waarde: vorigeMeting.gewicht } });
 
   /* --- kcal-grafiek: staafkleur volgens de richtlijn --- */
   const kcalMin = instellingen.kcal_min, kcalMax = instellingen.kcal_max;
@@ -1450,7 +1526,8 @@ async function laadGegevens() {
     el("tbody", {}, ...[...gewichten].reverse().map((g) => bewerkbareRij({
       cellen: [
         { naam: "datum", tekst: g.datum, klasse: "gedempt",
-          maak: () => el("input", { type: "date", value: g.datum }) },
+          maak: () => el("input", { value: g.datum, placeholder: "yyyy-mm-dd",
+                                    pattern: "\\d{4}-\\d{2}-\\d{2}", style: "width:110px" }) },
         { naam: "gewicht", tekst: `${fmt.format(g.gewicht)} kg`, klasse: "getal", nadien: " kg",
           maak: () => el("input", { type: "number", step: "0.1", min: 1, value: g.gewicht, style: "width:80px" }) },
       ],
@@ -1469,7 +1546,8 @@ async function laadGegevens() {
       el("th", { class: "getal" }, "Duur"), el("th", { class: "getal" }, "Snelheid"), el("th", {}))),
     el("tbody", {}, ...sport.map((s) => sportRij(s, laadGegevens, "melding-geg-sport", [
       { naam: "datum", tekst: s.datum, klasse: "gedempt",
-        maak: () => el("input", { type: "date", value: s.datum }) },
+        maak: () => el("input", { value: s.datum, placeholder: "yyyy-mm-dd",
+                                  pattern: "\\d{4}-\\d{2}-\\d{2}", style: "width:110px" }) },
       { tekst: s.type },
     ])))));
 }
