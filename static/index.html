@@ -85,7 +85,7 @@
           <datalist id="voedingslijst"></datalist>
         </label>
         <label>Hoeveelheid
-          <input type="number" id="vm-hoeveelheid" step="any" min="0.01" value="1">
+          <input type="number" id="vm-hoeveelheid" step="1" min="1" value="1">
         </label>
         <span id="vm-eenheid" style="font-size:13px;color:var(--gedempt);padding-bottom:8px;min-width:60px"></span>
         <label>Uur
@@ -98,7 +98,7 @@
         <summary style="font-size:13px;color:var(--inkt-2);cursor:pointer">Vrije invoer (niet in catalogus)</summary>
         <form class="regel" id="form-vrij">
           <label>Naam <input id="vrij-naam" style="width:180px"></label>
-          <label>Hoeveelheid <input type="number" id="vrij-hoeveelheid" step="any" min="0.01" value="1"></label>
+          <label>Hoeveelheid <input type="number" id="vrij-hoeveelheid" step="1" min="1" value="1"></label>
           <label>Eenheid
             <select id="vrij-eenheid"><option value="stuks">stuks</option><option value="gram">gram</option></select>
           </label>
