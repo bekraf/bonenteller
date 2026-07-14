@@ -1,0 +1,3 @@
+# De map zelf zit in git, maar de foto's erin worden niet gesynct.
+*
+!.gitignore
