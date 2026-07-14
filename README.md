@@ -33,6 +33,8 @@ Het dashboard heeft vijf tabbladen:
 
 - **Dashboard** — grafieken van gewicht (met doellijn en BMI-zones), calorieën
   per dag en sport per dag, met periodefilters (7/14/30/90/180 dagen of alles).
+  Hover over de gewichtsgrafiek toont gewicht, datum en BMI van die dag, plus —
+  als er in `afbeeldingen/` een weegschaalfoto van die datum staat — de foto zelf.
 - **Dagboek** — per dag porties eten loggen (uit de catalogus óf vrije invoer),
   sportactiviteiten toevoegen en je gewicht opslaan.
 - **Weekoverzicht** — een weektabel met dagtotalen, gekleurd wanneer een waarde
@@ -50,6 +52,8 @@ koolhydraten, eiwit, zout, vezels**.
 ```
 app.py            # webserver + JSON-API (http.server + sqlite3)
 gezondheid.db     # SQLite-database met alle data
+afbeeldingen/     # weegschaalfoto's (IMG_JJJJMMDD_….jpg); de map zit in git,
+                  # de foto's zelf niet (zie afbeeldingen/.gitignore)
 static/
   index.html      # de enige pagina (vijf tabbladen)
   app.js          # frontend-logica en grafieken (vanilla JS)
@@ -77,14 +81,15 @@ kloppen, ook als je een catalogusitem later aanpast of verwijdert.
 
 ## API
 
-Alles onder `/api/` spreekt JSON; al het andere is een statisch bestand uit
-`static/`.
+Alles onder `/api/` spreekt JSON; `/afbeeldingen/<bestandsnaam>` serveert een
+weegschaalfoto, en al het andere is een statisch bestand uit `static/`.
 
 | Methode | Pad | Doel |
 |---------|-----|------|
 | GET | `/api/instellingen` | alle instellingen |
 | PUT | `/api/instellingen` | instellingen opslaan |
 | GET | `/api/gewicht` | alle gewichtmetingen |
+| GET | `/api/afbeeldingen` | weegschaalfoto's per datum (`{"2026-07-12": [bestandsnaam, …]}`) |
 | POST | `/api/gewicht` | meting opslaan (overschrijft bij bestaande datum) |
 | DELETE | `/api/gewicht/<id>` | meting verwijderen |
 | GET | `/api/voedingsmiddelen` | de volledige catalogus |

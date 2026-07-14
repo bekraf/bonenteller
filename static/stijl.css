@@ -180,6 +180,11 @@ main { padding: 16px 24px 48px; max-width: 1180px; margin: 0 auto; }
 .zweefinfo .zw-waarde { font-weight: 600; font-size: 15px; }
 .zweefinfo .zw-label { color: var(--inkt-2); font-size: 12px; }
 
+/* Weegschaalfoto('s) in het zweefvenster van de gewichtsgrafiek: naast
+   elkaar, vaste hoogte zodat het venster niet verspringt tijdens het laden. */
+.zweefinfo .zw-foto { display: flex; gap: 6px; margin-top: 6px; }
+.zweefinfo .zw-foto img { height: 160px; border-radius: 6px; display: block; }
+
 /* Tabellen */
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
 

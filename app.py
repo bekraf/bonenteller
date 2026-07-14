@@ -22,12 +22,13 @@ import sqlite3
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 
 # Paden: alles staat naast dit script.
 HIER = Path(__file__).resolve().parent
 DB_PAD = HIER / "gezondheid.db"
 STATISCH = HIER / "static"   # map met index.html, app.js en stijl.css
+AFBEELDINGEN = HIER / "afbeeldingen"   # weegschaalfoto's (niet in git gesynct)
 
 # De zes voedingswaarden, altijd in deze vaste volgorde (zo staat het ook in
 # de database en in de frontend): kcal, vet, koolhydraten, eiwit, zout, vezels.
@@ -48,7 +49,18 @@ MIME = {
     ".css": "text/css; charset=utf-8",
     ".svg": "image/svg+xml",
     ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
 }
+
+# Alleen deze extensies tellen als foto in de afbeeldingenmap (er staat daar
+# bv. ook een video tussen, die slaan we over).
+FOTO_EXTENSIES = {".jpg", ".jpeg", ".png", ".webp"}
+
+# De datum zit in de bestandsnaam zoals de telefoon die wegschrijft:
+# IMG_20260712_111748.jpg -> 2026-07-12.
+FOTO_DATUM_RE = re.compile(r"^IMG[_-]?(\d{4})(\d{2})(\d{2})")
 
 
 def db():
@@ -180,6 +192,29 @@ def api_gewicht_bewerk(con, gewicht_id, gegevens):
                 (datum, gewicht, gewicht_id))
     con.commit()
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# API: weegschaalfoto's
+# ---------------------------------------------------------------------------
+
+def api_afbeeldingen():
+    """Alle foto's uit de afbeeldingenmap, gegroepeerd op datum:
+    {"2026-07-12": ["IMG_20260712_111748.jpg", ...], ...}. De datum komt uit
+    de bestandsnaam; bestanden zonder herkenbare datum (of geen foto, zoals
+    een video) worden overgeslagen. De frontend toont de foto van een dag in
+    het zweefvenster van de gewichtsgrafiek."""
+    fotos = {}
+    if AFBEELDINGEN.is_dir():
+        for bestand in sorted(AFBEELDINGEN.iterdir()):
+            if bestand.suffix.lower() not in FOTO_EXTENSIES:
+                continue
+            m = FOTO_DATUM_RE.match(bestand.name)
+            if not m:
+                continue
+            datum = "-".join(m.groups())
+            fotos.setdefault(datum, []).append(bestand.name)
+    return fotos
 
 
 # ---------------------------------------------------------------------------
@@ -528,13 +563,15 @@ class Handler(BaseHTTPRequestHandler):
         """Stuur een foutmelding; de frontend toont die aan de gebruiker."""
         self._json({"fout": melding}, status)
 
-    def _statisch(self, pad):
-        """Serveer een bestand uit de map static/. De resolve()-controle
-        voorkomt dat iemand met ../ buiten die map kan lezen."""
+    def _statisch(self, pad, basis=STATISCH):
+        """Serveer een bestand uit de map static/ (of, voor de foto's, uit de
+        afbeeldingenmap). De resolve()-controle voorkomt dat iemand met ../
+        buiten die map kan lezen. unquote() omdat bestandsnamen met spaties of
+        haakjes percent-gecodeerd in de URL staan."""
         if pad == "/":
             pad = "/index.html"
-        bestand = (STATISCH / pad.lstrip("/")).resolve()
-        if not str(bestand).startswith(str(STATISCH)) or not bestand.is_file():
+        bestand = (basis / unquote(pad).lstrip("/")).resolve()
+        if not str(bestand).startswith(str(basis)) or not bestand.is_file():
             self._fout("niet gevonden", 404)
             return
         body = bestand.read_bytes()
@@ -561,10 +598,14 @@ class Handler(BaseHTTPRequestHandler):
         pad = url.path
         query = parse_qs(url.query)
 
-        # Alles buiten /api/ is een statisch bestand (de frontend zelf).
+        # Alles buiten /api/ is een statisch bestand: de frontend zelf, of
+        # een weegschaalfoto uit de afbeeldingenmap.
         if not pad.startswith("/api/"):
             if methode == "GET":
-                self._statisch(pad)
+                if pad.startswith("/afbeeldingen/"):
+                    self._statisch(pad[len("/afbeeldingen"):], AFBEELDINGEN)
+                else:
+                    self._statisch(pad)
             else:
                 self._fout("niet gevonden", 404)
             return
@@ -596,6 +637,8 @@ class Handler(BaseHTTPRequestHandler):
                 return api_instellingen(con)
             if pad == "/api/gewicht":
                 return api_gewicht_lijst(con)
+            if pad == "/api/afbeeldingen":
+                return api_afbeeldingen()
             if pad == "/api/voedingsmiddelen":
                 return api_voedingsmiddelen(con)
             if pad == "/api/dagen":

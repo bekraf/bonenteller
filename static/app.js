@@ -345,6 +345,8 @@ function nietteStappen(maxW, aantal = 5) {
                   eenheid als de waarden (hier: de BMI-zones omgerekend naar kg)
      lengte     — lichaamslengte in m; toont de BMI van elk punt in het
                   zweefvenster
+     fotos      — {datum: [bestandsnaam, ...]}: weegschaalfoto's per datum;
+                  bij hover verschijnt de foto van die dag in het zweefvenster
      vastBereik — {min, max}: dwing het y-bereik (voor de 'Alles'-weergave,
                   zodat de BMI-grenzen altijd in beeld zijn)
      grenzen    — [{waarde, label}] rode grenslijnen met tekst (onder-/overgewicht)
@@ -492,6 +494,22 @@ function lijnGrafiek(houder, punten, opties = {}) {
     class: "astekst", style: "fill:var(--inkt);font-weight:600;font-size:12px",
   }, fmt.format(laatste.waarde)));
 
+  // Weegschaalfoto's: per meetdag met foto('s) alvast de <img>-knopen maken,
+  // zodat de browser ze meteen op de achtergrond binnenhaalt — bij hover
+  // staat de foto dan al klaar. Bewust geen aparte thumbnails: het
+  // "thumbnail" ís het volledige bestand, dat gaat vlot genoeg over het LAN.
+  const fotoImgs = {};
+  if (opties.fotos) {
+    for (const p of punten) {
+      const namen = opties.fotos[p.datum];
+      if (namen) {
+        fotoImgs[p.datum] = namen.map((naam) =>
+          el("img", { src: "/afbeeldingen/" + encodeURIComponent(naam),
+                      alt: `weegschaalfoto ${p.datum}` }));
+      }
+    }
+  }
+
   // Zweeflaag: een verticale kruisdraad springt naar het dichtstbijzijnde
   // meetpunt; je hoeft dus nooit precies op de lijn te mikken.
   const kruis = svgEl("line", { y1: 0, y2: bh, class: "kruisdraad", visibility: "hidden" });
@@ -524,6 +542,13 @@ function lijnGrafiek(houder, punten, opties = {}) {
     // Bij gewicht: ook de BMI van dit punt tonen (gewicht / lengte²).
     if (opties.lengte) {
       regels.push([`BMI ${fmt.format(best.waarde / (opties.lengte * opties.lengte))}`, "zw-label"]);
+    }
+    // De weegschaalfoto('s) van deze dag, naast elkaar in één strook. Via een
+    // fragment komen de (al geladen) img-knopen samen in één zw-foto-regel.
+    if (fotoImgs[best.datum]) {
+      const strook = document.createDocumentFragment();
+      strook.append(...fotoImgs[best.datum]);
+      regels.push([strook, "zw-foto"]);
     }
     toonZweefinfo(e.clientX, e.clientY, regels);
   });
@@ -812,10 +837,11 @@ async function laadDashboard() {
   const van = filterDagen === "jaar" ? `${new Date().getFullYear()}-01-01`
     : filterDagen ? plusDagen(einde, -filterDagen + 1) : "0001-01-01";
 
-  // Gewichten en dagtotalen parallel ophalen.
-  const [gewichten, dagen] = await Promise.all([
+  // Gewichten, dagtotalen en de lijst weegschaalfoto's parallel ophalen.
+  const [gewichten, dagen, fotos] = await Promise.all([
     api("/api/gewicht"),
     api(`/api/dagen?van=${van}&tot=${einde}`),
+    api("/api/afbeeldingen"),
   ]);
   // Gewichtmetingen zijn wél compleet op het moment van wegen, dus die van
   // vandaag telt gewoon mee.
@@ -954,7 +980,7 @@ async function laadDashboard() {
   lijnGrafiek(document.getElementById("grafiek-gewicht"),
     gewichtBereik.map((g) => ({ datum: g.datum, waarde: g.gewicht })),
     { doel, doelLabel: doel ? `doel ${fmt.format(doel)}` : "", eenheid: "kg",
-      zones, lengte, vastBereik, grenzen, bereik,
+      zones, lengte, vastBereik, grenzen, bereik, fotos,
       vorige: vorigeMeting && { datum: vorigeMeting.datum, waarde: vorigeMeting.gewicht } });
 
   /* --- kcal-grafiek: staafkleur volgens de richtlijn --- */
