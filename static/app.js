@@ -837,13 +837,11 @@ async function laadDashboard() {
   const van = filterDagen === "jaar" ? `${new Date().getFullYear()}-01-01`
     : filterDagen ? plusDagen(einde, -filterDagen + 1) : "0001-01-01";
 
-  // Gewichten, dagtotalen, de lijst weegschaalfoto's en alle sport-
-  // activiteiten (voor het totaal gelopen km) parallel ophalen.
-  const [gewichten, dagen, fotos, sportAlles] = await Promise.all([
+  // Gewichten, dagtotalen en de lijst weegschaalfoto's parallel ophalen.
+  const [gewichten, dagen, fotos] = await Promise.all([
     api("/api/gewicht"),
     api(`/api/dagen?van=${van}&tot=${einde}`),
     api("/api/afbeeldingen"),
-    api("/api/sport"),
   ]);
   // Gewichtmetingen zijn wél compleet op het moment van wegen, dus die van
   // vandaag telt gewoon mee.
@@ -923,15 +921,16 @@ async function laadDashboard() {
     el("div", { class: "waarde", style: `color:${sportKleur}` }, `${fmt0.format(minPerDag)} min/dag`),
     el("div", { class: "delta" }, `${fmt0.format(minPerWeek)} min/week`)));
 
-  // Tegel: totaal gelopen kilometers, over ALLE loopactiviteiten (bewust
-  // niet gefilterd op de gekozen periode): afstand = snelheid × duur.
-  const kmGelopen = sportAlles
+  // Tegel: totaal gelopen kilometers binnen de gekozen periode:
+  // afstand = snelheid × duur.
+  const kmGelopen = dagen
+    .flatMap((d) => d.sport)
     .filter((s) => s.type === "lopen" && s.snelheid_kmh)
     .reduce((som, s) => som + s.snelheid_kmh * s.duur_minuten / 60, 0);
   tegels.append(el("div", { class: "tegel" },
     el("div", { class: "label" }, "Gelopen"),
     el("div", { class: "waarde", style: "color:var(--sport-lopen)" }, `${fmt0.format(kmGelopen)} km`),
-    el("div", { class: "delta" }, "totaal, alle loopactiviteiten")));
+    el("div", { class: "delta" }, "in deze periode")));
 
   /* --- gedeelde x-as voor de drie grafieken ---
      Alle grafieken krijgen hetzelfde datumbereik en één band per kalenderdag,
