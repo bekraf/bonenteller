@@ -357,6 +357,10 @@ function nietteStappen(maxW, aantal = 5) {
                   zweefvenster
      fotos      — {datum: [bestandsnaam, ...]}: weegschaalfoto's per datum;
                   bij hover verschijnt de foto van die dag in het zweefvenster
+     sindsWeging — {kcalPerDag: {datum: kcal}, sportPerDag: {datum: minuten},
+                  vanaf}: toont in het zweefvenster de gemiddelde kcal en
+                  sportminuten per dag sinds de vorige weging; 'vanaf' is de
+                  eerste datum waarvoor de maps compleet zijn (eerder = niet tonen)
      vastBereik — {min, max}: dwing het y-bereik (voor de 'Alles'-weergave,
                   zodat de BMI-grenzen altijd in beeld zijn)
      grenzen    — [{waarde, label}] rode grenslijnen met tekst (onder-/overgewicht)
@@ -564,6 +568,31 @@ function lijnGrafiek(houder, punten, opties = {}) {
     // Bij gewicht: ook de BMI van dit punt tonen (gewicht / lengte²).
     if (opties.lengte) {
       regels.push([`BMI ${fmt.format(p.waarde / (opties.lengte * opties.lengte))}`, "zw-label"]);
+    }
+    // Gemiddelde kcal en sportminuten per dag sinds de vorige weging: van de
+    // dag van die weging t/m de dag vóór deze meting — er wordt 's ochtends
+    // gewogen, dus wat op de weegdag zelf gebeurt zit pas in de vólgende
+    // meting. Voor kcal tellen alleen dagen met gelogd eten mee (net als in
+    // de Gem. kcal-tegel); voor sport tellen alle dagen mee, want een rustdag
+    // is een echte nul (zelfde conventie als de Sport-tegel).
+    if (opties.sindsWeging) {
+      const i = punten.indexOf(p);
+      const vorige = i > 0 ? punten[i - 1].datum : opties.vorige && opties.vorige.datum;
+      if (vorige && vorige >= opties.sindsWeging.vanaf) {
+        let som = 0, eetdagen = 0, sportMin = 0, nDagen = 0;
+        for (let d = vorige; d < p.datum; d = plusDagen(d, 1)) {
+          const kcal = opties.sindsWeging.kcalPerDag[d] || 0;
+          if (kcal > 0) { som += kcal; eetdagen++; }
+          sportMin += opties.sindsWeging.sportPerDag[d] || 0;
+          nDagen++;
+        }
+        if (eetdagen) {
+          regels.push([`gem. ${fmt0.format(som / eetdagen)} kcal/dag`, "zw-label"]);
+        }
+        if (nDagen) {
+          regels.push([`gem. ${fmt0.format(sportMin / nDagen)} min/dag gesport`, "zw-label"]);
+        }
+      }
     }
     // De weegschaalfoto('s) van deze dag, naast elkaar in één strook. Via een
     // fragment komen de (al geladen) img-knopen samen in één zw-foto-regel.
@@ -900,11 +929,21 @@ async function laadDashboard() {
     : filterDagen ? plusDagen(einde, -filterDagen + 1) : "0001-01-01";
 
   // Gewichten, dagtotalen en de lijst weegschaalfoto's parallel ophalen.
-  const [gewichten, dagen, fotos] = await Promise.all([
+  // De dagtotalen komen een stukje ruimer binnen dan de periode zelf: het
+  // zweefvenster van de gewichtsgrafiek toont de gemiddelde kcal sinds de
+  // vórige weging, en voor de eerste meting binnen beeld ligt die weging
+  // vóór de periode. 35 dagen extra dekt ruim een maand tussen twee wegingen.
+  const dagenVan = filterDagen ? plusDagen(van, -35) : van;
+  const [gewichten, dagenRuim, fotos] = await Promise.all([
     api("/api/gewicht"),
-    api(`/api/dagen?van=${van}&tot=${einde}`),
+    api(`/api/dagen?van=${dagenVan}&tot=${einde}`),
     api("/api/afbeeldingen"),
   ]);
+  // Alles behalve dat zweefvenster rekent op de gekozen periode zelf.
+  const dagen = dagenRuim.filter((d) => d.datum >= van);
+  const kcalPerDag = Object.fromEntries(dagenRuim.map((d) => [d.datum, d.kcal]));
+  const sportPerDag = Object.fromEntries(dagenRuim.map(
+    (d) => [d.datum, d.sport.reduce((t, s) => t + s.duur_minuten, 0)]));
   // Gewichtmetingen zijn wél compleet op het moment van wegen, dus die van
   // vandaag telt gewoon mee.
   const gewichtBereik = gewichten.filter((g) => g.datum >= van);
@@ -1054,6 +1093,7 @@ async function laadDashboard() {
     gewichtBereik.map((g) => ({ datum: g.datum, waarde: g.gewicht })),
     { doel, doelLabel: doel ? `doel ${fmt.format(doel)}` : "", eenheid: "kg",
       zones, lengte, vastBereik, grenzen, bereik, fotos,
+      sindsWeging: { kcalPerDag, sportPerDag, vanaf: dagenVan },
       vorige: vorigeMeting && { datum: vorigeMeting.datum, waarde: vorigeMeting.gewicht } });
 
   /* --- kcal-grafiek: staafkleur volgens de richtlijn --- */
