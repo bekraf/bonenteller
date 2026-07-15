@@ -796,7 +796,7 @@ function sportGrafiek(houder, dagen) {
 /* ================= 4. Dashboard ================= */
 
 let instellingen = {};   // doelgewicht, lengte, richtlijnen — geladen bij start
-let filterDagen = 0;     // actieve periodefilter (0 = alles, "jaar" = sinds 1 januari)
+let filterDagen = "jaar"; // actieve periodefilter (0 = alles, "jaar" = sinds 1 januari)
 
 // Periodeknoppen: één filterrij die alles op het dashboard herschaalt.
 document.getElementById("bereikfilters").addEventListener("click", (e) => {
@@ -1052,6 +1052,10 @@ async function laadDashboard() {
 let catalogus = [];   // de voedingsmiddelencatalogus, gecachet na eerste keer laden
 const dagInvoer = document.getElementById("dag-datum");
 dagInvoer.value = vandaag();
+
+// Sporttype start altijd op "lopen" — sommige browsers zetten anders bij
+// herladen de vorige keuze (bv. krachttraining) terug.
+document.getElementById("sport-type").value = "lopen";
 
 // Bladeren per dag: pijltjes, "Vandaag" of rechtstreeks de datumkiezer.
 document.getElementById("dag-vorige").addEventListener("click", () => {

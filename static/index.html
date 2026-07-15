@@ -38,8 +38,8 @@
       <button data-dagen="14">Laatste 14 dagen</button>
       <button data-dagen="30">Laatste 30 dagen</button>
       <button data-dagen="90">Laatste 90 dagen</button>
-      <button data-dagen="jaar">Van begin jaar</button>
-      <button data-dagen="0" class="actief">Alles</button>
+      <button data-dagen="jaar" class="actief">Van begin jaar</button>
+      <button data-dagen="0">Alles</button>
     </div>
 
     <div class="kaart">
@@ -121,8 +121,8 @@
         <div id="dag-sport"></div>
         <form class="regel" id="form-sport">
           <label>Type
-            <select id="sport-type">
-              <option value="lopen">lopen</option>
+            <select id="sport-type" autocomplete="off">
+              <option value="lopen" selected>lopen</option>
               <option value="fietsen">fietsen</option>
               <option value="krachttraining">krachttraining</option>
             </select>
