@@ -322,7 +322,17 @@ function toonZweefinfo(x, y, regels) {
   zweefinfo.style.top = `${y - b.height - 10 + window.scrollY}px`;
 }
 
-function verbergZweefinfo() { zweefinfo.style.display = "none"; }
+// Vastgeklikt punt (voor aanraakschermen, waar hover onhandig is): de
+// gewichtsgrafiek kan het zweefvenster op een aangeklikt meetpunt vastzetten.
+// verbergZweefinfo valt dan terug op dat punt in plaats van te sluiten, zodat
+// het venster blijft staan tot een ander punt wordt aangeklikt of gehoverd —
+// ook als tussendoor een andere grafiek het zweefvenster even overnam.
+let zweefVast = null;   // { houder, toon(), laatLos() } of null
+
+function verbergZweefinfo() {
+  if (zweefVast) { zweefVast.toon(); return; }
+  zweefinfo.style.display = "none";
+}
 
 // Kies een "nette" stapgrootte voor de y-as (1, 2, 2.5, 5, 10, 20, 500, ...)
 // zodat de aslabels ronde getallen zijn.
@@ -358,6 +368,12 @@ function nietteStappen(maxW, aantal = 5) {
                   binnen beeld begint */
 function lijnGrafiek(houder, punten, opties = {}) {
   houder.replaceChildren();
+  // Een vastgeklikt punt uit de vorige tekening van deze grafiek hoort bij de
+  // net vervangen SVG: loslaten, anders blijft het venster op een spookpunt staan.
+  if (zweefVast && zweefVast.houder === houder) {
+    zweefVast = null;
+    verbergZweefinfo();
+  }
   if (!punten.length) {
     houder.append(el("p", { class: "subtitel" }, "Geen gegevens in deze periode."));
     return;
@@ -520,39 +536,85 @@ function lijnGrafiek(houder, punten, opties = {}) {
   const vlak = svgEl("rect", { x: 0, y: 0, width: bw, height: bh, fill: "transparent" });
   g.append(vlak);
 
-  vlak.addEventListener("pointermove", (e) => {
-    // Muispositie omrekenen naar grafiekcoördinaten (de SVG schaalt mee met
-    // de kaartbreedte, vandaar de omrekening via de werkelijke rect).
+  // Het meetpunt dat het dichtst bij een schermpositie (clientX) ligt. De SVG
+  // schaalt mee met de kaartbreedte, vandaar de omrekening via de echte rect.
+  const dichtsteBij = (clientX) => {
     const rect = svg.getBoundingClientRect();
-    const mx = ((e.clientX - rect.left) / rect.width) * B - m.l;
+    const mx = ((clientX - rect.left) / rect.width) * B - m.l;
     let best = punten[0], bestAfstand = Infinity;
     for (const p of punten) {
       const afstand = Math.abs(xVan(p.datum) - mx);
       if (afstand < bestAfstand) { bestAfstand = afstand; best = p; }
     }
-    const px = xVan(best.datum), py = yVan(best.waarde);
+    return best;
+  };
+
+  // Kruisdraad + bolletje op meetpunt p zetten en het zweefvenster bij
+  // schermpositie (x, y) tonen.
+  const toonPunt = (p, x, y) => {
+    const px = xVan(p.datum), py = yVan(p.waarde);
     kruis.setAttribute("x1", px); kruis.setAttribute("x2", px);
     kruis.setAttribute("visibility", "visible");
     punt.setAttribute("cx", px); punt.setAttribute("cy", py);
     punt.setAttribute("visibility", "visible");
     const regels = [
-      [`${fmt.format(best.waarde)} ${opties.eenheid || ""}`, "zw-waarde"],
-      [datumLang(best.datum), "zw-label"],
+      [`${fmt.format(p.waarde)} ${opties.eenheid || ""}`, "zw-waarde"],
+      [datumLang(p.datum), "zw-label"],
     ];
     // Bij gewicht: ook de BMI van dit punt tonen (gewicht / lengte²).
     if (opties.lengte) {
-      regels.push([`BMI ${fmt.format(best.waarde / (opties.lengte * opties.lengte))}`, "zw-label"]);
+      regels.push([`BMI ${fmt.format(p.waarde / (opties.lengte * opties.lengte))}`, "zw-label"]);
     }
     // De weegschaalfoto('s) van deze dag, naast elkaar in één strook. Via een
     // fragment komen de (al geladen) img-knopen samen in één zw-foto-regel.
-    if (fotoImgs[best.datum]) {
+    if (fotoImgs[p.datum]) {
       const strook = document.createDocumentFragment();
-      strook.append(...fotoImgs[best.datum]);
+      strook.append(...fotoImgs[p.datum]);
       regels.push([strook, "zw-foto"]);
     }
-    toonZweefinfo(e.clientX, e.clientY, regels);
+    toonZweefinfo(x, y, regels);
+  };
+
+  // Vastklikken (vooral voor de telefoon, waar hover onhandig is): een klik
+  // zet het zweefvenster vast op dat punt, verankerd aan het punt zelf in
+  // plaats van aan de aanwijzer. Het blijft staan tot een ander punt wordt
+  // aangeklikt of gehoverd, of tot dezelfde klik het weer loslaat.
+  let vastPunt = null;
+  const toonVast = () => {
+    const rect = svg.getBoundingClientRect();
+    toonPunt(vastPunt,
+      rect.left + ((m.l + xVan(vastPunt.datum)) / B) * rect.width,
+      rect.top + ((m.t + yVan(vastPunt.waarde)) / H) * rect.height);
+  };
+  const laatLos = () => {
+    vastPunt = null;
+    kruis.setAttribute("visibility", "hidden");
+    punt.setAttribute("visibility", "hidden");
+    if (zweefVast && zweefVast.houder === houder) zweefVast = null;
+  };
+
+  vlak.addEventListener("pointermove", (e) => {
+    const best = dichtsteBij(e.clientX);
+    // Hover over een ánder punt laat het vastgeklikte punt los.
+    if (vastPunt && best !== vastPunt) laatLos();
+    if (vastPunt) toonVast();
+    else toonPunt(best, e.clientX, e.clientY);
+  });
+  vlak.addEventListener("click", (e) => {
+    const best = dichtsteBij(e.clientX);
+    if (best === vastPunt) {          // zelfde punt nogmaals: weer loslaten
+      laatLos();
+      verbergZweefinfo();
+    } else {
+      // Eén vastgezet venster tegelijk over alle grafieken heen.
+      if (zweefVast && zweefVast.houder !== houder) zweefVast.laatLos();
+      vastPunt = best;
+      zweefVast = { houder, toon: toonVast, laatLos };
+      toonVast();
+    }
   });
   vlak.addEventListener("pointerleave", () => {
+    if (vastPunt) { toonVast(); return; }
     kruis.setAttribute("visibility", "hidden");
     punt.setAttribute("visibility", "hidden");
     verbergZweefinfo();
