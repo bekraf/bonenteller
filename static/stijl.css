@@ -179,6 +179,12 @@ main { padding: 16px 24px 48px; max-width: 1180px; margin: 0 auto; }
 
 .zweefinfo .zw-waarde { font-weight: 600; font-size: 15px; }
 .zweefinfo .zw-label { color: var(--inkt-2); font-size: 12px; }
+/* Gekleurde regels: gewichtsverschil (groen eraf, rood erbij) en het
+   kcal-gemiddelde t.o.v. de richtlijn (groen binnen, amber onder, rood boven). */
+.zweefinfo .zw-goed { color: var(--goed); }
+.zweefinfo .zw-slecht { color: var(--slecht); }
+.zweefinfo .zw-onder { color: var(--onder-min); }
+.zweefinfo .zw-boven { color: var(--boven-max); }
 
 /* Weegschaalfoto('s) in het zweefvenster van de gewichtsgrafiek: naast
    elkaar, vaste hoogte zodat het venster niet verspringt tijdens het laden. */

@@ -358,9 +358,11 @@ function nietteStappen(maxW, aantal = 5) {
      fotos      — {datum: [bestandsnaam, ...]}: weegschaalfoto's per datum;
                   bij hover verschijnt de foto van die dag in het zweefvenster
      sindsWeging — {kcalPerDag: {datum: kcal}, sportPerDag: {datum: minuten},
-                  vanaf}: toont in het zweefvenster de gemiddelde kcal en
-                  sportminuten per dag sinds de vorige weging; 'vanaf' is de
-                  eerste datum waarvoor de maps compleet zijn (eerder = niet tonen)
+                  vanaf, kcalMin, kcalMax}: toont in het zweefvenster de
+                  gemiddelde kcal en sportminuten per dag sinds de vorige
+                  weging; 'vanaf' is de eerste datum waarvoor de maps compleet
+                  zijn (eerder = niet tonen). Met kcalMin/kcalMax kleurt het
+                  kcal-gemiddelde t.o.v. de richtlijn, net als de kcal-grafiek
      vastBereik — {min, max}: dwing het y-bereik (voor de 'Alles'-weergave,
                   zodat de BMI-grenzen altijd in beeld zijn)
      grenzen    — [{waarde, label}] rode grenslijnen met tekst (onder-/overgewicht)
@@ -575,27 +577,45 @@ function lijnGrafiek(houder, punten, opties = {}) {
     // meting. Voor kcal tellen alleen dagen met gelogd eten mee (net als in
     // de Gem. kcal-tegel); voor sport tellen alle dagen mee, want een rustdag
     // is een echte nul (zelfde conventie als de Sport-tegel).
+    let sportRegel = null;   // als laatste tekstregel, ná het gewichtsverschil
     if (opties.sindsWeging) {
+      const { kcalPerDag, sportPerDag, vanaf, kcalMin, kcalMax } = opties.sindsWeging;
       const i = punten.indexOf(p);
-      const vorige = i > 0 ? punten[i - 1].datum : opties.vorige && opties.vorige.datum;
-      if (vorige && vorige >= opties.sindsWeging.vanaf) {
+      const vorigePunt = i > 0 ? punten[i - 1] : opties.vorige;
+      if (vorigePunt && vorigePunt.datum >= vanaf) {
         let som = 0, eetdagen = 0, sportMin = 0, nDagen = 0;
-        for (let d = vorige; d < p.datum; d = plusDagen(d, 1)) {
-          const kcal = opties.sindsWeging.kcalPerDag[d] || 0;
+        for (let d = vorigePunt.datum; d < p.datum; d = plusDagen(d, 1)) {
+          const kcal = kcalPerDag[d] || 0;
           if (kcal > 0) { som += kcal; eetdagen++; }
-          sportMin += opties.sindsWeging.sportPerDag[d] || 0;
+          sportMin += sportPerDag[d] || 0;
           nDagen++;
         }
         if (eetdagen) {
-          regels.push([`gem. ${fmt0.format(som / eetdagen)} kcal/dag`, "zw-label"]);
+          // Zelfde kleurbetekenis als de kcal-grafiek: rood boven het
+          // maximum, amber onder het minimum, groen binnen de richtlijn —
+          // zonder richtlijn blijft de regel ongekleurd.
+          const gem = som / eetdagen;
+          const klasse = kcalMin == null && kcalMax == null ? ""
+            : kcalMax != null && gem > kcalMax ? " zw-boven"
+            : kcalMin != null && gem < kcalMin ? " zw-onder" : " zw-goed";
+          regels.push([`gem. ${fmt0.format(gem)} kcal/dag`, "zw-label" + klasse]);
         }
         if (nDagen) {
-          regels.push([`gem. ${fmt0.format(sportMin / nDagen)} min/dag gesport`, "zw-label"]);
+          sportRegel = [`gem. ${fmt0.format(sportMin / nDagen)} min/dag gesport`, "zw-label"];
         }
+      }
+      // Gewichtsverschil t.o.v. de vorige weging: groen eraf, rood erbij.
+      // Dit heeft de dagtotalen niet nodig, dus ook zonder complete
+      // kcal-/sportdata (vorige weging vóór 'vanaf') blijft dit zichtbaar.
+      if (vorigePunt) {
+        const d = p.waarde - vorigePunt.waarde;
+        regels.push([`${d >= 0 ? "+" : ""}${fmt.format(d)} kg sinds vorige weging`,
+                     "zw-label " + (d <= 0 ? "zw-goed" : "zw-slecht")]);
       }
     }
     // De weegschaalfoto('s) van deze dag, naast elkaar in één strook. Via een
     // fragment komen de (al geladen) img-knopen samen in één zw-foto-regel.
+    if (sportRegel) regels.push(sportRegel);
     if (fotoImgs[p.datum]) {
       const strook = document.createDocumentFragment();
       strook.append(...fotoImgs[p.datum]);
@@ -941,7 +961,10 @@ async function laadDashboard() {
   ]);
   // Alles behalve dat zweefvenster rekent op de gekozen periode zelf.
   const dagen = dagenRuim.filter((d) => d.datum >= van);
-  const kcalPerDag = Object.fromEntries(dagenRuim.map((d) => [d.datum, d.kcal]));
+  // Mét onderrapportage-correctie: het zweefvenster van de gewichtsgrafiek
+  // kleurt het weekgemiddelde t.o.v. de richtlijn, en die vergelijking moet
+  // dezelfde zijn als in de kcal-grafiek (die de gecorrigeerde waarden toont).
+  const kcalPerDag = Object.fromEntries(dagenRuim.map((d) => [d.datum, metOnderrapportage(d.kcal)]));
   const sportPerDag = Object.fromEntries(dagenRuim.map(
     (d) => [d.datum, d.sport.reduce((t, s) => t + s.duur_minuten, 0)]));
   // Gewichtmetingen zijn wél compleet op het moment van wegen, dus die van
@@ -1093,7 +1116,8 @@ async function laadDashboard() {
     gewichtBereik.map((g) => ({ datum: g.datum, waarde: g.gewicht })),
     { doel, doelLabel: doel ? `doel ${fmt.format(doel)}` : "", eenheid: "kg",
       zones, lengte, vastBereik, grenzen, bereik, fotos,
-      sindsWeging: { kcalPerDag, sportPerDag, vanaf: dagenVan },
+      sindsWeging: { kcalPerDag, sportPerDag, vanaf: dagenVan,
+                     kcalMin: instellingen.kcal_min, kcalMax: instellingen.kcal_max },
       vorige: vorigeMeting && { datum: vorigeMeting.datum, waarde: vorigeMeting.gewicht } });
 
   /* --- kcal-grafiek: staafkleur volgens de richtlijn --- */
