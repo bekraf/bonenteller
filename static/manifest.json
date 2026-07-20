@@ -1,0 +1,15 @@
+{
+  "name": "Gezondheidsdashboard",
+  "short_name": "Gezondheid",
+  "description": "Gewicht, voeding en sport bijhouden — lokaal dashboard",
+  "lang": "nl",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#171310",
+  "theme_color": "#171310",
+  "icons": [
+    { "src": "/icoon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icoon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icoon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

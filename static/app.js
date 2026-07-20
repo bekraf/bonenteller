@@ -3,9 +3,9 @@
 /* ===========================================================================
    Gezondheidsdashboard — frontend
    ---------------------------------------------------------------------------
-   Eén pagina met vier tabbladen (Dashboard, Dagboek, Weekoverzicht,
-   Voedingsmiddelen). Geen frameworks: alles is gewone DOM-manipulatie en
-   handgetekende SVG-grafieken.
+   Eén pagina met zes tabbladen (Dashboard, Dagboek, Weekoverzicht,
+   Voedingsmiddelen, Gegevens, Instellingen). Geen frameworks: alles is
+   gewone DOM-manipulatie en handgetekende SVG-grafieken.
 
    Opbouw van dit bestand:
      1. hulpfuncties (DOM bouwen, API praten, datums, notatie)
@@ -169,6 +169,43 @@ function toonMelding(id, tekst, ok = false) {
   knoop.textContent = tekst;
   knoop.classList.toggle("ok", ok);
   if (tekst) setTimeout(() => { knoop.textContent = ""; }, 4000);
+}
+
+/* --- 'Ongedaan maken' na verwijderen ------------------------------------
+   Verwijderen toont onderaan kort een melding met een herstelknop. Het
+   DELETE-antwoord van de server bevat de verwijderde rij; de knop zet die
+   terug via POST /api/herstel/<soort> (met een nieuw id). */
+const ongedaanBalk = el("div", { class: "ongedaan" });
+document.body.append(ongedaanBalk);
+let ongedaanTimer = null;
+
+function verbergOngedaan() {
+  clearTimeout(ongedaanTimer);
+  ongedaanBalk.classList.remove("zichtbaar");
+}
+
+function toonOngedaanBalk(inhoud, ms) {
+  ongedaanBalk.replaceChildren(...inhoud);
+  ongedaanBalk.classList.add("zichtbaar");
+  clearTimeout(ongedaanTimer);
+  ongedaanTimer = setTimeout(verbergOngedaan, ms);
+}
+
+// Verwijder een rij en bied 'ongedaan maken' aan. De aanroeper herlaadt
+// zelf na het verwijderen; 'herlaad' wordt gebruikt na een herstel.
+async function verwijderMetUndo(soort, id, tekst, herlaad) {
+  const antwoord = await api(`/api/${soort}/${id}`, { method: "DELETE" });
+  const knop = el("button", {}, "Ongedaan maken");
+  knop.addEventListener("click", async () => {
+    verbergOngedaan();
+    try {
+      await post(`/api/herstel/${soort}`, antwoord.rij);
+      herlaad();
+    } catch (fout) {
+      toonOngedaanBalk([el("span", {}, `Herstellen mislukt: ${fout.message}`)], 4000);
+    }
+  });
+  toonOngedaanBalk([el("span", {}, tekst), knop], 6000);
 }
 
 // "52 min hardlopen 11,6 km/u" — leesbare samenvatting van een activiteit.
@@ -925,15 +962,18 @@ document.getElementById("bereikfilters").addEventListener("click", (e) => {
    midden naar buiten lopen vijf kleurbanden (heel groen -> donker oranje);
    buiten het gezonde bereik is het donkerrood. Dezelfde schaal kleurt de
    achtergrond van de gewichtsgrafiek én de tegels bovenaan. */
-// Zelfde groen/geel/rood als de kcal-grafiek, zodat het hele dashboard één
-// palet spreekt: groen rond het midden, geel verder weg, rood aan de rand.
+// Zelfde groen/geel/rood als de kcal-grafiek (via de gedeelde
+// --grafiek-*-variabelen, instelbaar op het Instellingen-tabblad), zodat het
+// hele dashboard één palet spreekt: groen rond het midden, geel verder weg,
+// rood aan de rand.
 const BMI_ONDER = 18.5, BMI_MIDDEN = 21.7, BMI_BOVEN = 24.9;
-const BMI_BANDKLEUREN = ["#0ca30c", "#0ca30c", "#fab219", "#fab219", "#d03b3b"];
+const BMI_BANDKLEUREN = ["var(--grafiek-goed)", "var(--grafiek-goed)",
+  "var(--grafiek-onder)", "var(--grafiek-onder)", "var(--grafiek-boven)"];
 const BMI_BANDBREEDTE = (BMI_MIDDEN - BMI_ONDER) / BMI_BANDKLEUREN.length; // 0,64 BMI
-const BMI_BUITEN = "#d03b3b";   // onder-/overgewicht (vol aangezet)
+const BMI_BUITEN = "var(--grafiek-boven)";   // onder-/overgewicht (vol aangezet)
 
 function bmiKleur(bmi) {
-  if (bmi < BMI_ONDER || bmi > BMI_BOVEN) return "#e06060"; // leesbaar rood als tekst
+  if (bmi < BMI_ONDER || bmi > BMI_BOVEN) return "var(--slecht)"; // leesbaar rood als tekst
   const band = Math.min(
     Math.floor(Math.abs(bmi - BMI_MIDDEN) / BMI_BANDBREEDTE),
     BMI_BANDKLEUREN.length - 1);
@@ -1126,9 +1166,9 @@ async function laadDashboard() {
   // Zelfde betekenis als in de tabellen: groen binnen de richtlijn,
   // rood boven het maximum, amber onder het minimum.
   const kcalKleur = (w) => {
-    if (kcalMax != null && w > kcalMax) return "#d03b3b";
-    if (kcalMin != null && w < kcalMin) return "#fab219";
-    return "#0ca30c";
+    if (kcalMax != null && w > kcalMax) return "var(--grafiek-boven)";
+    if (kcalMin != null && w < kcalMin) return "var(--grafiek-onder)";
+    return "var(--grafiek-goed)";
   };
   // De subtitel meldt de correctie, anders lijkt de grafiek het dagboek
   // (dat de ruwe logwaarden toont) tegen te spreken.
@@ -1157,7 +1197,8 @@ async function laadDashboard() {
 
   // Legende bij de kcal-grafiek (kleur draagt hier betekenis).
   document.getElementById("legende-kcal").replaceChildren(
-    ...[["#0ca30c", "binnen richtlijn"], ["#fab219", "onder min"], ["#d03b3b", "boven max"]]
+    ...[["var(--grafiek-goed)", "binnen richtlijn"], ["var(--grafiek-onder)", "onder min"],
+        ["var(--grafiek-boven)", "boven max"]]
       .map(([kleur, label]) => el("span", { class: "sleutel" },
         el("span", { class: "vlak", style: `background:${kleur}` }), label)));
 
@@ -1195,12 +1236,20 @@ document.getElementById("dag-vandaag").addEventListener("click", () => {
 });
 dagInvoer.addEventListener("change", laadDag);
 
-// Laad de catalogus één keer en vul er de zoeklijst (datalist) mee.
+// Zoeklijst (datalist) in het dagboek: meest gelogde items eerst, zodat de
+// browser die bovenaan voorstelt; bij gelijke frequentie alfabetisch.
+function vulVoedingslijst() {
+  const volgorde = [...catalogus].sort((a, b) =>
+    (b.keer_gelogd || 0) - (a.keer_gelogd || 0) || a.naam.localeCompare(b.naam, "nl"));
+  document.getElementById("voedingslijst").replaceChildren(
+    ...volgorde.map((vm) => el("option", { value: vm.naam })));
+}
+
+// Laad de catalogus één keer en vul er de zoeklijst mee.
 async function zorgCatalogus() {
   if (!catalogus.length) {
     catalogus = await api("/api/voedingsmiddelen");
-    document.getElementById("voedingslijst").replaceChildren(
-      ...catalogus.map((vm) => el("option", { value: vm.naam })));
+    vulVoedingslijst();
   }
   return catalogus;
 }
@@ -1217,14 +1266,41 @@ document.getElementById("vm-zoek").addEventListener("input", () => {
   const vm = vindVoedingsmiddel(document.getElementById("vm-zoek").value);
   document.getElementById("vm-eenheid").textContent =
     vm ? (vm.eenheid === "stuk" ? `stuks · ${fmt.format(vm.kcal)} kcal/stuk` : `gram · ${fmt.format(vm.kcal)} kcal/100 g`) : "";
+  // De laatst gelogde hoeveelheid van dit item alvast invullen: wie 250 g
+  // havermout logt, logt de volgende keer meestal weer 250 g.
+  if (vm && vm.laatste_hoeveelheid) {
+    document.getElementById("vm-hoeveelheid").value = vm.laatste_hoeveelheid;
+  }
 });
 
-// Herlaad alles van de gekozen dag: voedingstabel, sport en gewichtmeting.
+// Uurvelden: bij het wisselen van dag een verse standaard — het huidige uur
+// als de getoonde dag vandaag is, anders leeg (uur is optioneel).
+let uurVoorDatum = null;
+function zetUurStandaard(datum) {
+  if (uurVoorDatum === datum) return;
+  uurVoorDatum = datum;
+  const uur = datum === vandaag() ? new Date().getHours() : "";
+  document.getElementById("vm-uur").value = uur;
+  document.getElementById("vrij-uur").value = uur;
+}
+
+// Herlaad alles van de gekozen dag: voedingstabel, sport, gewichtmeting en
+// notitie.
 async function laadDag() {
   await zorgCatalogus();
   const datum = dagInvoer.value;
   document.getElementById("dag-label").textContent = datumLang(datum);
+  zetUurStandaard(datum);
+
+  // Kopieerknop: benoem de brondag (de dag vóór de getoonde dag).
+  const vorigeDag = plusDagen(datum, -1);
+  const kopieerKnop = document.getElementById("dag-kopieer");
+  kopieerKnop.textContent =
+    datum === vandaag() ? "Kopieer van gisteren" : `Kopieer van ${datumKort(vorigeDag)}`;
+  kopieerKnop.title = `Neem alle voeding van ${datumLang(vorigeDag)} over naar deze dag`;
+
   const dag = await api(`/api/dag/${datum}`);
+  document.getElementById("dag-notitie").value = dag.notitie || "";
 
   /* --- voedingstabel --- */
   const houder = document.getElementById("dag-voeding");
@@ -1280,8 +1356,10 @@ async function laadDag() {
       hoevCel.addEventListener("click", () => startBewerken(false));
       knop.addEventListener("click", async () => {
         if (veldUur) { opslaan(); return; }
-        await api(`/api/voedingslog/${r.id}`, { method: "DELETE" });
-        laadDag();
+        try {
+          await verwijderMetUndo("voedingslog", r.id, `'${r.naam}' verwijderd.`, laadDag);
+          laadDag();
+        } catch (fout) { toonMelding("melding-voeding", fout.message); }
       });
       dupKnop.addEventListener("click", async () => {
         try {
@@ -1352,7 +1430,8 @@ async function laadDag() {
     wisKnop.addEventListener("click", async (e) => {
       e.stopPropagation();
       try {
-        await api(`/api/gewicht/${meting.id}`, { method: "DELETE" });
+        await verwijderMetUndo("gewicht", meting.id,
+          `Meting van ${datumKort(datum)} verwijderd.`, laadDag);
         document.getElementById("gewicht-kg").value = "";
         laadDag();
       } catch (fout) { toonMelding("melding-gewicht", fout.message); }
@@ -1364,6 +1443,31 @@ async function laadDag() {
     metingTekst.textContent = "Nog geen meting op deze dag.";
   }
 }
+
+// "Kopieer van gisteren": alle voeding van de dag vóór de getoonde dag
+// overnemen (zelfde uren, namen en waarden) — voor dagen die op elkaar lijken.
+document.getElementById("dag-kopieer").addEventListener("click", async () => {
+  const naar = dagInvoer.value, van = plusDagen(naar, -1);
+  try {
+    const r = await post("/api/voedingslog/kopieer", { van, naar });
+    if (r.aantal) {
+      toonMelding("melding-voeding", `${r.aantal} regels overgenomen van ${datumKort(van)}.`, true);
+      laadDag();
+    } else {
+      toonMelding("melding-voeding", `Niets gelogd op ${datumKort(van)}.`);
+    }
+  } catch (fout) { toonMelding("melding-voeding", fout.message); }
+});
+
+// Formulier: dagnotitie opslaan (lege tekst wist de notitie).
+document.getElementById("form-notitie").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await put(`/api/dag/${dagInvoer.value}/notitie`,
+      { tekst: document.getElementById("dag-notitie").value });
+    toonMelding("melding-notitie", "Opgeslagen.", true);
+  } catch (fout) { toonMelding("melding-notitie", fout.message); }
+});
 
 // Formulier: portie toevoegen uit de catalogus. De server rekent de
 // voedingswaarden uit (catalogus × hoeveelheid).
@@ -1596,8 +1700,7 @@ document.getElementById("cat-zoek").addEventListener("input", laadCatalogus);
 async function laadCatalogus() {
   catalogus = await api("/api/voedingsmiddelen");
   // De zoeklijst in het dagboek ook verversen (nieuwe items direct bruikbaar).
-  document.getElementById("voedingslijst").replaceChildren(
-    ...catalogus.map((vm) => el("option", { value: vm.naam })));
+  vulVoedingslijst();
 
   const zoek = document.getElementById("cat-zoek").value.trim().toLowerCase();
   const lijst = zoek ? catalogus.filter((vm) => vm.naam.includes(zoek)) : catalogus;
@@ -1610,29 +1713,70 @@ async function laadCatalogus() {
       // twee lege koppen voor de knoppenkolommen (Bewerken / Verwijder)
       ...NUTRIENT_LABELS.map((l) => el("th", { class: "getal" }, l)),
       el("th", {}), el("th", {}))),
-    el("tbody", {}, ...lijst.map((vm) => el("tr", {},
+    el("tbody", {}, ...lijst.map((vm) => {
       // De naam en het NOVA-cijfer kleuren volgens de groep (groen = 1
-      // onbewerkt ... rood = 4 ultrabewerkt).
-      el("td", { class: vm.nova ? `nova${vm.nova}` : "" }, vm.naam),
-      el("td", { class: "gedempt" }, vm.eenheid === "stuk" ? "per stuk" : "per 100 g"),
-      el("td", { class: vm.nova ? `nova${vm.nova}` : "gedempt" }, vm.nova ? String(vm.nova) : "?"),
-      ...NUTRIENTEN.map((k) => el("td", { class: "getal" }, fmt.format(vm[k]))),
-      el("td", {}, el("button", {
-        class: "klein", onclick: () => bewerkVoedingsmiddel(vm),
-      }, "Bewerken")),
-      // Verwijderen vraagt eerst bevestiging; eerder gelogde porties blijven
-      // gewoon bestaan (die dragen hun eigen naam en waarden).
-      el("td", {}, el("button", {
-        class: "klein",
-        onclick: async () => {
-          if (!confirm(`'${vm.naam}' verwijderen uit de catalogus?\nAl gelogde porties blijven bewaard.`)) return;
-          try {
-            await api(`/api/voedingsmiddelen/${vm.id}`, { method: "DELETE" });
-            toonMelding("melding-catalogus", `'${vm.naam}' verwijderd.`, true);
-            laadCatalogus();
-          } catch (fout) { toonMelding("melding-catalogus", fout.message); }
-        },
-      }, "Verwijder")))))));
+      // onbewerkt ... rood = 4 ultrabewerkt). Klikken op de naam klapt de
+      // loggeschiedenis van het item uit.
+      const naamCel = el("td", {
+        class: (vm.nova ? `nova${vm.nova} ` : "") + "klik-bewerk",
+        title: "Klik voor de loggeschiedenis",
+      }, vm.naam);
+      const rij = el("tr", {},
+        naamCel,
+        el("td", { class: "gedempt" }, vm.eenheid === "stuk" ? "per stuk" : "per 100 g"),
+        el("td", { class: vm.nova ? `nova${vm.nova}` : "gedempt" }, vm.nova ? String(vm.nova) : "?"),
+        ...NUTRIENTEN.map((k) => el("td", { class: "getal" }, fmt.format(vm[k]))),
+        el("td", {}, el("button", {
+          class: "klein", onclick: () => bewerkVoedingsmiddel(vm),
+        }, "Bewerken")),
+        // Verwijderen vraagt eerst bevestiging; eerder gelogde porties blijven
+        // gewoon bestaan (die dragen hun eigen naam en waarden).
+        el("td", {}, el("button", {
+          class: "klein",
+          onclick: async () => {
+            if (!confirm(`'${vm.naam}' verwijderen uit de catalogus?\nAl gelogde porties blijven bewaard.`)) return;
+            try {
+              await api(`/api/voedingsmiddelen/${vm.id}`, { method: "DELETE" });
+              toonMelding("melding-catalogus", `'${vm.naam}' verwijderd.`, true);
+              laadCatalogus();
+            } catch (fout) { toonMelding("melding-catalogus", fout.message); }
+          },
+        }, "Verwijder")));
+      naamCel.addEventListener("click", () => toonHistoriek(vm, rij));
+      return rij;
+    }))));
+}
+
+// "250 g" of "2×", afhankelijk van de eenheid van een logregel.
+function hoeveelheidTekst(hoeveelheid, eenheid) {
+  return eenheid === "stuks" || eenheid === "stuk"
+    ? `${fmt.format(hoeveelheid)}×` : `${fmt.format(hoeveelheid)} g`;
+}
+
+// Klik op een naam in de catalogus: klapt onder die rij de loggeschiedenis
+// van het item uit (hoe vaak, wanneer laatst, gemiddelde portie, aandeel in
+// alle gelogde kcal en de laatste keren). Nogmaals klikken klapt weer dicht.
+async function toonHistoriek(vm, rij) {
+  const volgende = rij.nextElementSibling;
+  const wasOpen = volgende && volgende.classList.contains("historiekrij");
+  document.querySelectorAll("tr.historiekrij").forEach((r) => r.remove());
+  if (wasOpen) return;
+  try {
+    const h = await api(`/api/voedingsmiddelen/${vm.id}/historiek`);
+    const inhoud = el("div", {});
+    if (!h.keer) {
+      inhoud.append(el("span", { class: "gedempt" }, "Nog nooit gelogd."));
+    } else {
+      inhoud.append(el("div", {},
+        el("strong", {}, `${fmt0.format(h.keer)}× gelogd`),
+        ` · laatst op ${h.laatste} · gemiddeld ${hoeveelheidTekst(h.gem_hoeveelheid, vm.eenheid)}` +
+        ` per keer · ${fmt0.format(h.totaal_kcal)} kcal in totaal (${fmt.format(h.pct_kcal)}% van alles)`));
+      inhoud.append(el("div", { class: "gedempt" }, "Laatste keren: " +
+        h.regels.map((r) => `${r.datum} ${hoeveelheidTekst(r.hoeveelheid, r.eenheid)}`).join(" · ")));
+    }
+    // 11 kolommen: naam, eenheid, NOVA, zes waarden en twee knoppencellen.
+    rij.after(el("tr", { class: "historiekrij" }, el("td", { colspan: "11" }, inhoud)));
+  } catch (fout) { toonMelding("melding-catalogus", fout.message); }
 }
 
 // "Bewerken" zet het formulier bovenaan in bewerkmodus: naam en eenheid
@@ -1719,7 +1863,8 @@ async function laadGegevens() {
       opslaan: (invoer) => put(`/api/gewicht/${g.id}`, {
         datum: invoer.datum.value, gewicht: invoer.gewicht.value,
       }),
-      verwijder: () => api(`/api/gewicht/${g.id}`, { method: "DELETE" }),
+      verwijder: () => verwijderMetUndo("gewicht", g.id,
+        `Meting van ${g.datum} verwijderd.`, laadGegevens),
       herlaad: laadGegevens,
       melding: "melding-geg-gewicht",
     })))));
@@ -1755,7 +1900,8 @@ function sportRij(s, herlaad, melding, voorCellen) {
       datum: invoer.datum ? invoer.datum.value : "",
       duur_minuten: invoer.duur.value, snelheid_kmh: invoer.snelheid.value,
     }),
-    verwijder: () => api(`/api/sport/${s.id}`, { method: "DELETE" }),
+    verwijder: () => verwijderMetUndo("sport", s.id,
+      `${sportTekst(s)} (${s.datum}) verwijderd.`, herlaad),
     herlaad, melding,
   });
 }
@@ -1811,43 +1957,50 @@ const RICHTLIJN_LABELS = {
 };
 
 /* --- kleurinstellingen --------------------------------------------------
-   Elke rij koppelt een instellingensleutel aan de CSS-variabele die die rol
-   in de hele app kleurt: [sleutel, css-variabele, label, uitleg]. Niet
-   ingesteld = de standaardkleur uit stijl.css. */
+   Elke rij koppelt een instellingensleutel aan de CSS-variabelen die die
+   rol in de hele app kleuren: [sleutel, [css-variabelen], label, uitleg].
+   Sommige rollen hebben twee varianten (tekst + grafiek); één keuze
+   overschrijft ze allebei. Niet ingesteld = de standaardkleur uit
+   stijl.css. */
 const KLEUR_INSTELLINGEN = [
-  ["kleur_pagina", "--pagina", "Achtergrond", "de pagina achter alles"],
-  ["kleur_oppervlak", "--oppervlak", "Kaarten", "kaarten en grafiekoppervlak"],
-  ["kleur_knoppen", "--accent", "Knoppen", "de actieknoppen (Toevoegen, Opslaan, ...)"],
-  ["kleur_boven_max", "--boven-max", "Boven maximum", "waarden boven de richtlijn (↑)"],
-  ["kleur_onder_min", "--onder-min", "Onder minimum", "waarden onder de richtlijn (↓)"],
-  ["kleur_nova1", "--nova1", "NOVA 1", "onbewerkt of minimaal bewerkt"],
-  ["kleur_nova2", "--nova2", "NOVA 2", "bewerkt culinair ingrediënt"],
-  ["kleur_nova3", "--nova3", "NOVA 3", "bewerkt"],
-  ["kleur_nova4", "--nova4", "NOVA 4", "ultrabewerkt"],
-  ["kleur_sport_lopen", "--sport-lopen", "Sport: lopen", ""],
-  ["kleur_sport_fietsen", "--sport-fietsen", "Sport: fietsen", ""],
-  ["kleur_sport_krachttraining", "--sport-krachttraining", "Sport: krachttraining", ""],
-  ["kleur_sport_zwemmen", "--sport-zwemmen", "Sport: zwemmen", ""],
-  ["kleur_sport_overig", "--sport-overig", "Sport: overig", "onherkende oude invoer"],
+  ["kleur_pagina", ["--pagina"], "Achtergrond", "de pagina achter alles"],
+  ["kleur_oppervlak", ["--oppervlak"], "Kaarten", "kaarten en grafiekoppervlak"],
+  ["kleur_knoppen", ["--accent"], "Knoppen", "de actieknoppen (Toevoegen, Opslaan, ...)"],
+  ["kleur_goed", ["--goed", "--grafiek-goed"], "Goed / binnen richtlijn", "groen: binnen de richtlijn, gewicht eraf"],
+  ["kleur_boven_max", ["--boven-max", "--grafiek-boven"], "Boven maximum", "waarden boven de richtlijn (↑)"],
+  ["kleur_onder_min", ["--onder-min", "--grafiek-onder"], "Onder minimum", "waarden onder de richtlijn (↓)"],
+  ["kleur_slecht", ["--slecht"], "Slecht", "rood: gewicht erbij, te weinig sport"],
+  ["kleur_nova1", ["--nova1"], "NOVA 1", "onbewerkt of minimaal bewerkt"],
+  ["kleur_nova2", ["--nova2"], "NOVA 2", "bewerkt culinair ingrediënt"],
+  ["kleur_nova3", ["--nova3"], "NOVA 3", "bewerkt"],
+  ["kleur_nova4", ["--nova4"], "NOVA 4", "ultrabewerkt"],
+  ["kleur_sport_lopen", ["--sport-lopen"], "Sport: lopen", ""],
+  ["kleur_sport_fietsen", ["--sport-fietsen"], "Sport: fietsen", ""],
+  ["kleur_sport_krachttraining", ["--sport-krachttraining"], "Sport: krachttraining", ""],
+  ["kleur_sport_zwemmen", ["--sport-zwemmen"], "Sport: zwemmen", ""],
+  ["kleur_sport_overig", ["--sport-overig"], "Sport: overig", "onherkende oude invoer"],
 ];
 
 // De standaardkleuren uit stijl.css, vastgelegd bij het laden (vóór er
-// overrides gezet zijn) — voor de kleurkiezers en de terugzetknop.
+// overrides gezet zijn) — voor de kleurkiezers en de terugzetknop. Bij
+// rollen met twee varianten toont de kiezer de eerste (de tekstkleur).
 const STANDAARD_KLEUREN = (() => {
   const stijl = getComputedStyle(document.documentElement);
   return Object.fromEntries(KLEUR_INSTELLINGEN.map(
-    ([sleutel, cssVar]) => [sleutel, stijl.getPropertyValue(cssVar).trim()]));
+    ([sleutel, cssVars]) => [sleutel, stijl.getPropertyValue(cssVars[0]).trim()]));
 })();
 
 // Zet de gekozen kleuren uit de instellingen als CSS-variabelen op :root;
 // alles wat via die variabelen kleurt (knoppen, grafieken, NOVA, ...) volgt
 // dan vanzelf. Niet-ingestelde sleutels vallen terug op stijl.css.
 function pasKleurenToe() {
-  for (const [sleutel, cssVar] of KLEUR_INSTELLINGEN) {
-    if (instellingen[sleutel]) {
-      document.documentElement.style.setProperty(cssVar, instellingen[sleutel]);
-    } else {
-      document.documentElement.style.removeProperty(cssVar);
+  for (const [sleutel, cssVars] of KLEUR_INSTELLINGEN) {
+    for (const cssVar of cssVars) {
+      if (instellingen[sleutel]) {
+        document.documentElement.style.setProperty(cssVar, instellingen[sleutel]);
+      } else {
+        document.documentElement.style.removeProperty(cssVar);
+      }
     }
   }
 }

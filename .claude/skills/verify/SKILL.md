@@ -37,5 +37,6 @@ de shell (exit 144) — gebruik `app[.]py` en aparte aanroepen.
 - `?dagen=7|14|30|90|jaar|0` kiest de dashboardperiode vooraf (0 = alles).
 - `#dagboek/2026-07-03` opent het dagboek op een datum.
 - Data checken: `sqlite3 gezondheid.db` — tabellen: gewichtmetingen,
-  voedingslog, sportactiviteiten, voedingsmiddelen, instellingen.
+  voedingslog, sportactiviteiten, voedingsmiddelen, instellingen, dagnotities
+  (die laatste maakt app.py bij het opstarten aan als ze ontbreekt).
 - Dashboard telt t/m gisteren; gewichtmeting van vandaag telt wél mee.

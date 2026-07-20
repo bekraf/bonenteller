@@ -16,10 +16,14 @@ Opbouw van dit bestand:
   3. de HTTP-handler die URL's naar die functies routeert
 """
 
+import csv
+import io
 import json
 import re
 import sqlite3
 import sys
+import zipfile
+from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs, unquote
@@ -47,6 +51,7 @@ MIME = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
     ".css": "text/css; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
     ".svg": "image/svg+xml",
     ".png": "image/png",
     ".jpg": "image/jpeg",
@@ -114,7 +119,7 @@ INSTELLING_SLEUTELS = {
 # standaardkleur uit stijl.css.
 KLEUR_SLEUTELS = {
     "kleur_pagina", "kleur_oppervlak", "kleur_knoppen",
-    "kleur_boven_max", "kleur_onder_min",
+    "kleur_boven_max", "kleur_onder_min", "kleur_goed", "kleur_slecht",
     "kleur_nova1", "kleur_nova2", "kleur_nova3", "kleur_nova4",
     "kleur_sport_lopen", "kleur_sport_fietsen",
     "kleur_sport_krachttraining", "kleur_sport_zwemmen", "kleur_sport_overig",
@@ -222,10 +227,69 @@ def api_afbeeldingen():
 # ---------------------------------------------------------------------------
 
 def api_voedingsmiddelen(con):
-    """De volledige catalogus, alfabetisch. 'eenheid' is 'stuk' (waarden per
-    stuk) of '100g' (waarden per 100 gram)."""
-    return [dict(r) for r in con.execute(
+    """De volledige catalogus, alfabetisch, elk item aangevuld met zijn
+    loggeschiedenis: hoe vaak het gelogd is, wanneer voor het laatst en met
+    welke hoeveelheid. De frontend sorteert er de zoeklijst in het dagboek
+    mee (meest gelogd eerst) en vult de laatste hoeveelheid alvast in.
+    'eenheid' is 'stuk' (waarden per stuk) of '100g' (per 100 gram)."""
+    items = [dict(r) for r in con.execute(
         "SELECT * FROM voedingsmiddelen ORDER BY naam")]
+    # Logregels horen bij een item via de koppeling (voedingsmiddel_id) of
+    # anders via de naam — dezelfde regel als de NOVA-koppeling in api_dagen.
+    stats = {r["vm_id"]: r for r in con.execute(
+        "SELECT COALESCE(l.voedingsmiddel_id, vmn.id) vm_id, "
+        "COUNT(*) keer, MAX(l.datum) laatste "
+        "FROM voedingslog l "
+        "LEFT JOIN voedingsmiddelen vmn ON vmn.naam = l.naam "
+        "GROUP BY vm_id HAVING vm_id IS NOT NULL")}
+    # Per item de hoeveelheid van de recentste logregel (nieuwste datum, id).
+    laatste = {r["vm_id"]: r["hoeveelheid"] for r in con.execute(
+        "SELECT vm_id, hoeveelheid FROM ("
+        "  SELECT COALESCE(l.voedingsmiddel_id, vmn.id) vm_id, l.hoeveelheid, "
+        "         ROW_NUMBER() OVER (PARTITION BY COALESCE(l.voedingsmiddel_id, vmn.id) "
+        "                            ORDER BY l.datum DESC, l.id DESC) rn "
+        "  FROM voedingslog l "
+        "  LEFT JOIN voedingsmiddelen vmn ON vmn.naam = l.naam) "
+        "WHERE rn = 1 AND vm_id IS NOT NULL")}
+    for vm in items:
+        s = stats.get(vm["id"])
+        vm["keer_gelogd"] = s["keer"] if s else 0
+        vm["laatst_gelogd"] = s["laatste"] if s else None
+        vm["laatste_hoeveelheid"] = laatste.get(vm["id"])
+    return items
+
+
+def api_voedingsmiddel_historiek(con, vm_id):
+    """De loggeschiedenis van één catalogusitem, voor de uitklaprij in de
+    catalogustabel: hoe vaak gelogd, wanneer laatst, de gemiddelde portie,
+    het aandeel in alle gelogde kcal en de laatste tien logregels. Regels
+    zonder koppeling tellen mee via de naam."""
+    vm = con.execute("SELECT * FROM voedingsmiddelen WHERE id = ?", (vm_id,)).fetchone()
+    if vm is None:
+        raise FoutInvoer("voedingsmiddel niet gevonden")
+    waar = "(voedingsmiddel_id = ? OR (voedingsmiddel_id IS NULL AND naam = ?))"
+    args = (vm_id, vm["naam"])
+    # Het portiegemiddelde telt alleen regels in de eenheid van het item mee;
+    # oude regels in een andere eenheid (rekenbladimport) zouden het
+    # gemiddelde anders scheeftrekken.
+    log_eenheid = "stuks" if vm["eenheid"] == "stuk" else "gram"
+    tot = con.execute(
+        f"SELECT COUNT(*) keer, MAX(datum) laatste, "
+        f"AVG(CASE WHEN eenheid = ? THEN hoeveelheid END) gem, "
+        f"SUM(kcal) som_kcal FROM voedingslog WHERE {waar}",
+        (log_eenheid, *args)).fetchone()
+    alle_kcal = con.execute("SELECT SUM(kcal) FROM voedingslog").fetchone()[0] or 0
+    regels = [dict(r) for r in con.execute(
+        f"SELECT datum, uur, hoeveelheid, eenheid, kcal FROM voedingslog "
+        f"WHERE {waar} ORDER BY datum DESC, id DESC LIMIT 10", args)]
+    return {
+        "keer": tot["keer"],
+        "laatste": tot["laatste"],
+        "gem_hoeveelheid": round(tot["gem"] or 0, 1),
+        "totaal_kcal": round(tot["som_kcal"] or 0, 1),
+        "pct_kcal": round(100 * (tot["som_kcal"] or 0) / alle_kcal, 1) if alle_kcal else 0,
+        "regels": regels,
+    }
 
 
 def eis_nova(gegevens):
@@ -361,7 +425,24 @@ def api_dag(con, datum):
     sport = [dict(r) for r in con.execute(
         "SELECT * FROM sportactiviteiten WHERE datum = ? ORDER BY id", (datum,))]
     totaal = {k: round(sum(r[k] or 0 for r in regels), 1) for k in VOEDING_KOLOMMEN}
-    return {"datum": datum, "regels": regels, "sport": sport, "totaal": totaal}
+    notitie = con.execute(
+        "SELECT tekst FROM dagnotities WHERE datum = ?", (datum,)).fetchone()
+    return {"datum": datum, "regels": regels, "sport": sport, "totaal": totaal,
+            "notitie": notitie["tekst"] if notitie else ""}
+
+
+def api_notitie_bewerk(con, datum, gegevens):
+    """De vrije dagnotitie van één dag opslaan; een lege tekst wist de
+    notitie. Eén notitie per dag."""
+    eis_datum(datum)
+    tekst = (gegevens.get("tekst") or "").strip()
+    if tekst:
+        con.execute("INSERT OR REPLACE INTO dagnotities (datum, tekst) VALUES (?, ?)",
+                    (datum, tekst))
+    else:
+        con.execute("DELETE FROM dagnotities WHERE datum = ?", (datum,))
+    con.commit()
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +519,25 @@ def api_voedingslog_dupliceer(con, log_id):
         "FROM voedingslog WHERE id = ?", (log_id,))
     con.commit()
     return {"ok": True, "id": cur.lastrowid}
+
+
+def api_voedingslog_kopieer(con, gegevens):
+    """'Kopieer van gisteren': alle logregels van de ene dag overnemen naar
+    de andere (zelfde uren, namen en waarden) — voor dagen die op elkaar
+    lijken. Geeft het aantal gekopieerde regels terug; 0 betekent dat er op
+    de brondag niets gelogd was."""
+    van = eis_datum(gegevens.get("van"))
+    naar = eis_datum(gegevens.get("naar"))
+    if van == naar:
+        raise FoutInvoer("van en naar zijn dezelfde dag")
+    cur = con.execute(
+        "INSERT INTO voedingslog (datum, uur, voedingsmiddel_id, naam, "
+        "hoeveelheid, eenheid, kcal, vet, koolhydraten, eiwit, zout, vezels) "
+        "SELECT ?, uur, voedingsmiddel_id, naam, hoeveelheid, eenheid, "
+        "kcal, vet, koolhydraten, eiwit, zout, vezels "
+        "FROM voedingslog WHERE datum = ?", (naar, van))
+    con.commit()
+    return {"ok": True, "aantal": cur.rowcount}
 
 
 def api_voedingslog_bewerk(con, log_id, gegevens):
@@ -519,22 +619,78 @@ def api_sport_bewerk(con, sport_id, gegevens):
     return {"ok": True}
 
 
-# Vaste verwijderquery's per URL-naam; zo staat er nooit een variabele
-# tabelnaam in een query.
+# Vaste query's per URL-naam; zo staat er nooit een variabele tabelnaam in
+# een query. De SELECT haalt de rij op vóór het verwijderen, zodat de
+# frontend ze via 'ongedaan maken' kan terugzetten (POST /api/herstel/<soort>).
 VERWIJDER_QUERIES = {
     "voedingslog": "DELETE FROM voedingslog WHERE id = ?",
     "sport": "DELETE FROM sportactiviteiten WHERE id = ?",
     "gewicht": "DELETE FROM gewichtmetingen WHERE id = ?",
 }
+OPVRAAG_QUERIES = {
+    "voedingslog": "SELECT * FROM voedingslog WHERE id = ?",
+    "sport": "SELECT * FROM sportactiviteiten WHERE id = ?",
+    "gewicht": "SELECT * FROM gewichtmetingen WHERE id = ?",
+}
 
 
 def verwijder(con, soort, rij_id):
-    """Eén rij verwijderen (voedingslog, sport of gewicht)."""
-    cur = con.execute(VERWIJDER_QUERIES[soort], (rij_id,))
-    con.commit()
-    if cur.rowcount == 0:
+    """Eén rij verwijderen (voedingslog, sport of gewicht). Het antwoord
+    bevat de verwijderde rij (zonder id), zodat de frontend ze met
+    'ongedaan maken' kan terugzetten via api_herstel."""
+    rij = con.execute(OPVRAAG_QUERIES[soort], (rij_id,)).fetchone()
+    if rij is None:
         raise FoutInvoer("niet gevonden")
-    return {"ok": True}
+    con.execute(VERWIJDER_QUERIES[soort], (rij_id,))
+    con.commit()
+    rij = dict(rij)
+    del rij["id"]
+    return {"ok": True, "rij": rij}
+
+
+def api_herstel(con, soort, gegevens):
+    """'Ongedaan maken' van een verwijdering: de rij uit het DELETE-antwoord
+    wordt teruggezet (met een nieuw id). Gewicht en sport lopen via hun
+    bestaande invoerfuncties; een voedingslogregel wordt exact hersteld,
+    inclusief de bewaarde waarden en — als het item nog bestaat — de
+    koppeling naar de catalogus."""
+    if soort == "gewicht":
+        return api_gewicht_nieuw(con, gegevens)
+    if soort == "sport":
+        return api_sport_nieuw(con, gegevens)
+    datum = eis_datum(gegevens.get("datum"))
+    uur = gegevens.get("uur")
+    if uur not in (None, ""):
+        uur = int(eis_getal(uur, "uur", 0))
+        if uur > 24:
+            raise FoutInvoer("uur moet tussen 0 en 24 liggen")
+    else:
+        uur = None
+    naam = (gegevens.get("naam") or "").strip().lower()
+    if not naam:
+        raise FoutInvoer("naam is verplicht")
+    eenheid = gegevens.get("eenheid")
+    if eenheid not in ("gram", "stuks"):
+        raise FoutInvoer("eenheid moet 'gram' of 'stuks' zijn")
+    hoeveelheid = eis_getal(gegevens.get("hoeveelheid"), "hoeveelheid", 0.01)
+    waarden = [eis_getal(gegevens.get(k, 0), k, 0) for k in VOEDING_KOLOMMEN]
+    vm_id = gegevens.get("voedingsmiddel_id")
+    if vm_id and con.execute("SELECT 1 FROM voedingsmiddelen WHERE id = ?",
+                             (vm_id,)).fetchone() is None:
+        vm_id = None   # het item is intussen uit de catalogus verdwenen
+    cur = con.execute(
+        "INSERT INTO voedingslog (datum, uur, voedingsmiddel_id, naam, "
+        "hoeveelheid, eenheid, kcal, vet, koolhydraten, eiwit, zout, vezels) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (datum, uur, vm_id, naam, hoeveelheid, eenheid, *waarden))
+    con.commit()
+    return {"ok": True, "id": cur.lastrowid}
+
+
+# Tabellen die in de CSV-export gaan (vaste namen: er komt nooit invoer van
+# de gebruiker in een tabelnaam terecht).
+EXPORT_TABELLEN = ("instellingen", "gewichtmetingen", "voedingsmiddelen",
+                   "voedingslog", "sportactiviteiten", "dagnotities")
 
 
 # ---------------------------------------------------------------------------
@@ -581,6 +737,44 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    # -- exportbestanden ----------------------------------------------------
+
+    def _bestand(self, body, bestandsnaam, content_type):
+        """Stuur een download (Content-Disposition: attachment)."""
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Disposition",
+                         f'attachment; filename="{bestandsnaam}"')
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _export(self, soort):
+        """GET /api/export/db of /api/export/csv: alle gegevens als download.
+        'db' is een momentopname van het SQLite-bestand (via serialize(),
+        dus veilig terwijl de server draait); 'csv' is een zip met één CSV
+        per tabel."""
+        con = db()
+        try:
+            vandaag = date.today().isoformat()
+            if soort == "db":
+                self._bestand(con.serialize(), f"gezondheid-{vandaag}.db",
+                              "application/octet-stream")
+                return
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zip_:
+                for tabel in EXPORT_TABELLEN:
+                    tekst = io.StringIO()
+                    schrijver = csv.writer(tekst)
+                    cur = con.execute(f"SELECT * FROM {tabel}")  # vaste naam
+                    schrijver.writerow([k[0] for k in cur.description])
+                    schrijver.writerows(cur)
+                    zip_.writestr(f"{tabel}.csv", tekst.getvalue())
+            self._bestand(buffer.getvalue(), f"gezondheid-export-{vandaag}.zip",
+                          "application/zip")
+        finally:
+            con.close()
+
     # -- verzoeken verwerken ------------------------------------------------
 
     def _body(self):
@@ -608,6 +802,11 @@ class Handler(BaseHTTPRequestHandler):
                     self._statisch(pad)
             else:
                 self._fout("niet gevonden", 404)
+            return
+
+        # De exportpaden geven een bestand terug in plaats van JSON.
+        if methode == "GET" and pad in ("/api/export/db", "/api/export/csv"):
+            self._export(pad.rsplit("/", 1)[1])
             return
 
         con = db()
@@ -647,6 +846,9 @@ class Handler(BaseHTTPRequestHandler):
                 return api_sport_lijst(con)
             if len(delen) == 2 and delen[0] == "dag":   # /api/dag/2026-07-03
                 return api_dag(con, delen[1])
+            # GET /api/voedingsmiddelen/<id>/historiek: loggeschiedenis.
+            if len(delen) == 3 and delen[0] == "voedingsmiddelen" and delen[2] == "historiek":
+                return api_voedingsmiddel_historiek(con, int(delen[1]))
 
         if methode == "POST":
             if pad == "/api/gewicht":
@@ -655,16 +857,25 @@ class Handler(BaseHTTPRequestHandler):
                 return api_voedingsmiddel_nieuw(con, gegevens)
             if pad == "/api/voedingslog":
                 return api_voedingslog_nieuw(con, gegevens)
+            # POST /api/voedingslog/kopieer: alle regels van dag naar dag.
+            if pad == "/api/voedingslog/kopieer":
+                return api_voedingslog_kopieer(con, gegevens)
             # POST /api/voedingslog/<id>/dupliceer: kopie van een logregel.
             if len(delen) == 3 and delen[0] == "voedingslog" and delen[2] == "dupliceer":
                 return api_voedingslog_dupliceer(con, int(delen[1]))
             if pad == "/api/sport":
                 return api_sport_nieuw(con, gegevens)
+            # POST /api/herstel/<soort>: verwijderde rij terugzetten (undo).
+            if len(delen) == 2 and delen[0] == "herstel" and delen[1] in OPVRAAG_QUERIES:
+                return api_herstel(con, delen[1], gegevens)
 
         if methode == "PUT":
             # PUT /api/instellingen: instellingen opslaan.
             if pad == "/api/instellingen":
                 return api_instellingen_bewerk(con, gegevens)
+            # PUT /api/dag/<datum>/notitie: dagnotitie opslaan of wissen.
+            if len(delen) == 3 and delen[0] == "dag" and delen[2] == "notitie":
+                return api_notitie_bewerk(con, delen[1], gegevens)
             # PUT /api/voedingsmiddelen/<id>: waarden van een catalogusitem bewerken.
             if len(delen) == 2 and delen[0] == "voedingsmiddelen":
                 return api_voedingsmiddel_bewerk(con, int(delen[1]), gegevens)
@@ -705,6 +916,13 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     if not DB_PAD.exists():
         sys.exit("gezondheid.db niet gevonden — hoort naast app.py te staan")
+    # Tabellen die na de eerste opzet zijn bijgekomen, worden hier eenmalig
+    # aangemaakt (de rest van het schema komt uit de import van het rekenblad).
+    con = db()
+    con.execute("CREATE TABLE IF NOT EXISTS dagnotities ("
+                "datum TEXT PRIMARY KEY, tekst TEXT NOT NULL)")
+    con.commit()
+    con.close()
     poort = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
     server = ThreadingHTTPServer(("0.0.0.0", poort), Handler)
     print(f"Gezondheidsdashboard draait op http://0.0.0.0:{poort}  (Ctrl+C om te stoppen)")

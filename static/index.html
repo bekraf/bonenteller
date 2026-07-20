@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ==========================================================================
   Gezondheidsdashboard — de enige HTML-pagina van de app.
-  Vier tabbladen (secties met class "paneel"); app.js schakelt ertussen en
+  Zes tabbladen (secties met class "paneel"); app.js schakelt ertussen en
   vult alle tabellen en grafieken met data uit de API. Vaste volgorde van de
   voedingswaarden overal: kcal, vet, koolhydraten, eiwit, zout, vezels.
 =========================================================================== -->
@@ -9,8 +9,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#171310">
 <title>Gezondheidsdashboard</title>
 <link rel="stylesheet" href="/stijl.css">
+<!-- PWA: installeerbaar op het beginscherm van de telefoon -->
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" href="/icoon-192.png">
+<link rel="apple-touch-icon" href="/icoon-192.png">
 </head>
 <body>
 
@@ -76,7 +81,10 @@
     </div>
 
     <div class="kaart">
-      <h2>Voeding</h2>
+      <div class="kaartkop">
+        <h2>Voeding</h2>
+        <button class="klein" type="button" id="dag-kopieer">Kopieer van gisteren</button>
+      </div>
       <div id="dag-voeding"></div>
 
       <form class="regel" id="form-voeding">
@@ -146,6 +154,18 @@
       </div>
     </div>
 
+    <div class="kaart">
+      <h2>Notitie</h2>
+      <p class="subtitel">vrije tekst bij deze dag — slaap, gevoel, context, ...</p>
+      <form id="form-notitie">
+        <textarea id="dag-notitie" rows="2" placeholder="Nog geen notitie voor deze dag."></textarea>
+        <div class="notitie-onder">
+          <button class="primair" type="submit">Opslaan</button>
+          <p class="melding" id="melding-notitie"></p>
+        </div>
+      </form>
+    </div>
+
   </section>
 
   <!-- ================= WEEKOVERZICHT ================= -->
@@ -204,6 +224,15 @@
         <div id="geg-sport-tabel"></div>
       </div>
 
+    </div>
+
+    <div class="kaart">
+      <h2>Export</h2>
+      <p class="subtitel">alle gegevens als download — voor backup of eigen analyse</p>
+      <div class="knoppenrij">
+        <a class="knop" href="/api/export/db">Database (gezondheid.db)</a>
+        <a class="knop" href="/api/export/csv">Alle tabellen als CSV (zip)</a>
+      </div>
     </div>
   </section>
 
