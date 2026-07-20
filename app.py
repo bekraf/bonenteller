@@ -36,8 +36,8 @@ VOEDING_KOLOMMEN = ("kcal", "vet", "koolhydraten", "eiwit", "zout", "vezels")
 
 # Toegelaten sporttypes. 'overig' bestaat als vangnet voor oude activiteiten
 # uit het rekenblad die niet herkend werden; de invoer in de app gebruikt de
-# eerste drie.
-SPORT_TYPES = ("lopen", "fietsen", "krachttraining", "overig")
+# andere vier.
+SPORT_TYPES = ("lopen", "fietsen", "krachttraining", "zwemmen", "overig")
 
 # Datums zijn overal tekst in ISO-vorm (JJJJ-MM-DD): dat sorteert vanzelf goed.
 DATUM_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -117,7 +117,7 @@ KLEUR_SLEUTELS = {
     "kleur_boven_max", "kleur_onder_min",
     "kleur_nova1", "kleur_nova2", "kleur_nova3", "kleur_nova4",
     "kleur_sport_lopen", "kleur_sport_fietsen",
-    "kleur_sport_krachttraining", "kleur_sport_overig",
+    "kleur_sport_krachttraining", "kleur_sport_zwemmen", "kleur_sport_overig",
 }
 KLEUR_RE = re.compile(r"^#[0-9a-f]{6}$")
 

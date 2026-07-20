@@ -796,9 +796,10 @@ const SPORT_KLEUREN = {
   lopen: "var(--sport-lopen)",
   krachttraining: "var(--sport-krachttraining)",
   fietsen: "var(--sport-fietsen)",
+  zwemmen: "var(--sport-zwemmen)",
   overig: "var(--sport-overig)",   // onherkende oude invoer
 };
-const SPORT_VOLGORDE = ["lopen", "krachttraining", "fietsen", "overig"];
+const SPORT_VOLGORDE = ["lopen", "krachttraining", "fietsen", "zwemmen", "overig"];
 
 function sportGrafiek(houder, dagen) {
   houder.replaceChildren();
@@ -1826,6 +1827,7 @@ const KLEUR_INSTELLINGEN = [
   ["kleur_sport_lopen", "--sport-lopen", "Sport: lopen", ""],
   ["kleur_sport_fietsen", "--sport-fietsen", "Sport: fietsen", ""],
   ["kleur_sport_krachttraining", "--sport-krachttraining", "Sport: krachttraining", ""],
+  ["kleur_sport_zwemmen", "--sport-zwemmen", "Sport: zwemmen", ""],
   ["kleur_sport_overig", "--sport-overig", "Sport: overig", "onherkende oude invoer"],
 ];
 
