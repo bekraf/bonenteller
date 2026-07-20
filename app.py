@@ -431,6 +431,17 @@ def api_dag(con, datum):
             "notitie": notitie["tekst"] if notitie else ""}
 
 
+def api_notities(con, query):
+    """Alle dagnotities tussen ?van= en ?tot= (beide inclusief) als
+    {datum: tekst}. Voedt het zweefvenster van de kcal-grafiek op het
+    dashboard, dat bij elke dag de notitie van die dag toont."""
+    van = eis_datum(query.get("van", ["0000-01-01"])[0])
+    tot = eis_datum(query.get("tot", ["9999-12-31"])[0])
+    return {r["datum"]: r["tekst"] for r in con.execute(
+        "SELECT datum, tekst FROM dagnotities WHERE datum BETWEEN ? AND ?",
+        (van, tot))}
+
+
 def api_notitie_bewerk(con, datum, gegevens):
     """De vrije dagnotitie van één dag opslaan; een lege tekst wist de
     notitie. Eén notitie per dag."""
@@ -842,6 +853,8 @@ class Handler(BaseHTTPRequestHandler):
                 return api_voedingsmiddelen(con)
             if pad == "/api/dagen":
                 return api_dagen(con, query)
+            if pad == "/api/notities":
+                return api_notities(con, query)
             if pad == "/api/sport":
                 return api_sport_lijst(con)
             if len(delen) == 2 and delen[0] == "dag":   # /api/dag/2026-07-03

@@ -114,6 +114,7 @@ weegschaalfoto, en al het andere is een statisch bestand uit `static/`.
 | DELETE | `/api/voedingsmiddelen/<id>` | catalogusitem verwijderen (log blijft) |
 | GET | `/api/dagen?van=&tot=` | dagtotalen (voeding + sport) in een periode |
 | GET | `/api/dag/<datum>` | alle details van één dag (incl. notitie) |
+| GET | `/api/notities?van=&tot=` | dagnotities in een periode (`{datum: tekst}`) |
 | PUT | `/api/dag/<datum>/notitie` | dagnotitie opslaan (lege tekst wist) |
 | POST | `/api/voedingslog` | portie loggen (uit catalogus of vrije invoer) |
 | POST | `/api/voedingslog/kopieer` | alle porties van dag `van` naar dag `naar` kopiëren |

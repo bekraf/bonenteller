@@ -197,6 +197,18 @@ main { padding: 16px 24px 48px; max-width: 1180px; margin: 0 auto; }
 .zweefinfo .zw-onder { color: var(--onder-min); }
 .zweefinfo .zw-boven { color: var(--boven-max); }
 
+/* Dagnotitie in het zweefvenster van de kcal-grafiek: cursief en gedempt,
+   en — anders dan de rest van het venster — met regelafbreking zodat een
+   lange notitie niet één ellenlange regel wordt. */
+.zweefinfo .zw-notitie {
+  color: var(--inkt-2);
+  font-style: italic;
+  font-size: 12px;
+  max-width: 280px;
+  white-space: normal;
+  margin-top: 3px;
+}
+
 /* Weegschaalfoto('s) in het zweefvenster van de gewichtsgrafiek: naast
    elkaar, vaste hoogte zodat het venster niet verspringt tijdens het laden. */
 .zweefinfo .zw-foto { display: flex; gap: 6px; margin-top: 6px; }

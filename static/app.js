@@ -710,14 +710,15 @@ function lijnGrafiek(houder, punten, opties = {}) {
 }
 
 /* Staafgrafiek (voor kcal per dag).
-   punten = [{datum, waarde, detail}] — 'detail' (bv. de sport van die dag)
-   komt als extra regel in het zweefvenster. opties:
+   punten = [{datum, waarde, detail, notitie}] — 'detail' (bv. de sport van
+   die dag) en 'notitie' (de dagnotitie) komen als extra regels in het
+   zweefvenster. opties:
      maxLijn / maxLabel — horizontale richtlijn boven (bv. max 2.600 kcal)
      minLijn / minLabel — horizontale richtlijn onder (bv. min 1.800 kcal)
      kleurVan           — functie waarde -> kleur, om elke staaf te kleuren
                           naargelang de waarde (anders de standaardblauw)
      bijKlik            — functie (punt) => ...; maakt elke dagband klikbaar
-                          (handwijzer + hintregel in het zweefvenster) */
+                          (handwijzer) */
 function staafGrafiek(houder, punten, opties = {}) {
   houder.replaceChildren();
   if (!punten.length) {
@@ -797,7 +798,7 @@ function staafGrafiek(houder, punten, opties = {}) {
       staaf.setAttribute("opacity", "0.75");
       const regels = [[`${fmt0.format(p.waarde)} kcal`, "zw-waarde"], [datumLang(p.datum), "zw-label"]];
       if (p.detail) regels.push([p.detail, "zw-label"]);
-      if (opties.bijKlik) regels.push(["klik voor het dagboek", "zw-label"]);
+      if (p.notitie) regels.push([`📝 ${p.notitie}`, "zw-notitie"]);
       toonZweefinfo(e.clientX, e.clientY, regels);
     });
     hit.addEventListener("pointerleave", () => {
@@ -995,10 +996,13 @@ async function laadDashboard() {
   // vórige weging, en voor de eerste meting binnen beeld ligt die weging
   // vóór de periode. 35 dagen extra dekt ruim een maand tussen twee wegingen.
   const dagenVan = filterDagen ? plusDagen(van, -35) : van;
-  const [gewichten, dagenRuim, fotos] = await Promise.all([
+  // De notities lopen t/m vandaag: als er vandaag al gewogen is, reikt de
+  // grafiek tot vandaag en hoort de notitie van vandaag er ook bij.
+  const [gewichten, dagenRuim, fotos, notities] = await Promise.all([
     api("/api/gewicht"),
     api(`/api/dagen?van=${dagenVan}&tot=${einde}`),
     api("/api/afbeeldingen"),
+    api(`/api/notities?van=${dagenVan}&tot=${vandaag()}`),
   ]);
   // Alles behalve dat zweefvenster rekent op de gekozen periode zelf.
   const dagen = dagenRuim.filter((d) => d.datum >= van);
@@ -1181,6 +1185,7 @@ async function laadDashboard() {
     alleDagen.map((d) => ({
       datum: d.datum, waarde: metOnderrapportage(d.kcal),
       detail: d.sport.map(sportTekst).join(" · "),  // sport in het zweefvenster
+      notitie: notities[d.datum],                   // dagnotitie idem
     })),
     {
       kleurVan: kcalMin != null || kcalMax != null ? kcalKleur : null,
