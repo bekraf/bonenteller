@@ -503,10 +503,11 @@ function lijnGrafiek(houder, punten, opties = {}) {
     }, grens.label));
   }
 
-  // Horizontale gridlijnen + y-aslabels.
+  // Alleen y-aslabels, géén horizontale gridlijnen: de BMI-zones kleuren de
+  // achtergrond al, en gridlijnen daaroverheen ogen rommelig. De grens- en
+  // doellijnen (verderop) blijven de enige horizontale lijnen.
   for (let w = yMin; w <= yMax + 1e-9; w += stap) {
     const y = yVan(w);
-    g.append(svgEl("line", { x1: 0, x2: bw, y1: y, y2: y, class: "gridlijn" }));
     g.append(svgEl("text", { x: -8, y: y + 4, "text-anchor": "end", class: "astekst" }, fmt.format(w)));
   }
   g.append(svgEl("line", { x1: 0, x2: bw, y1: bh, y2: bh, class: "aslijn" }));
@@ -536,7 +537,7 @@ function lijnGrafiek(houder, punten, opties = {}) {
   let pad = punten.map((p, i) => `${i ? "L" : "M"}${xVan(p.datum).toFixed(1)},${yVan(p.waarde).toFixed(1)}`).join("");
   if (voorpunt) pad = `M0,${yVan(voorpunt.waarde).toFixed(1)}L` + pad.slice(1);
   g.append(svgEl("path", {
-    d: pad, fill: "none", stroke: "var(--reeks-1)", "stroke-width": 2,
+    d: pad, fill: "none", stroke: "var(--gewichtslijn)", "stroke-width": 2,
     "stroke-linejoin": "round", "stroke-linecap": "round",
   }));
 
@@ -546,7 +547,7 @@ function lijnGrafiek(houder, punten, opties = {}) {
   const laatste = punten[punten.length - 1];
   g.append(svgEl("circle", {
     cx: xVan(laatste.datum), cy: yVan(laatste.waarde), r: 5,
-    fill: "var(--reeks-1)", stroke: "var(--oppervlak)", "stroke-width": 2,
+    fill: "var(--gewichtslijn)", stroke: "var(--oppervlak)", "stroke-width": 2,
   }));
   g.append(svgEl("text", {
     x: xVan(laatste.datum) + 9, y: yVan(laatste.waarde) + 4,
@@ -573,7 +574,7 @@ function lijnGrafiek(houder, punten, opties = {}) {
   // meetpunt; je hoeft dus nooit precies op de lijn te mikken.
   const kruis = svgEl("line", { y1: 0, y2: bh, class: "kruisdraad", visibility: "hidden" });
   const punt = svgEl("circle", {
-    r: 5, fill: "var(--reeks-1)", stroke: "var(--oppervlak)", "stroke-width": 2, visibility: "hidden",
+    r: 5, fill: "var(--gewichtslijn)", stroke: "var(--oppervlak)", "stroke-width": 2, visibility: "hidden",
   });
   g.append(kruis, punt);
   const vlak = svgEl("rect", { x: 0, y: 0, width: bw, height: bh, fill: "transparent" });
@@ -963,15 +964,14 @@ document.getElementById("bereikfilters").addEventListener("click", (e) => {
    midden naar buiten lopen vijf kleurbanden (heel groen -> donker oranje);
    buiten het gezonde bereik is het donkerrood. Dezelfde schaal kleurt de
    achtergrond van de gewichtsgrafiek én de tegels bovenaan. */
-// Zelfde groen/geel als de kcal-grafiek (via de gedeelde
-// --grafiek-*-variabelen, instelbaar op het Instellingen-tabblad), zodat het
-// hele dashboard één palet spreekt: groen rond het midden, geel verder weg,
-// oranje als buitenste band binnen het gezonde bereik (vaste --bmi-tussen).
+// Drie tinten binnen het gezonde bereik (de --bmi-*-variabelen in
+// stijl.css): groen rond het midden, geel verder weg, oranje aan de rand —
+// warme tinten die aansluiten op het rode onder-/overgewichtvlak.
 const BMI_ONDER = 18.5, BMI_MIDDEN = 21.7, BMI_BOVEN = 24.9;
-const BMI_BANDKLEUREN = ["var(--grafiek-goed)", "var(--grafiek-goed)",
-  "var(--grafiek-onder)", "var(--grafiek-onder)", "var(--bmi-tussen)"];
+const BMI_BANDKLEUREN = ["var(--bmi-groen)", "var(--bmi-groen)",
+  "var(--bmi-geel)", "var(--bmi-geel)", "var(--bmi-oranje)"];
 const BMI_BANDBREEDTE = (BMI_MIDDEN - BMI_ONDER) / BMI_BANDKLEUREN.length; // 0,64 BMI
-const BMI_BUITEN = "var(--grafiek-boven)";   // onder-/overgewicht (vol aangezet)
+const BMI_BUITEN = "var(--bmi-buiten)";   // onder-/overgewicht (vol aangezet)
 
 function bmiKleur(bmi) {
   if (bmi < BMI_ONDER || bmi > BMI_BOVEN) return "var(--slecht)"; // leesbaar rood als tekst
@@ -1123,16 +1123,17 @@ async function laadDashboard() {
 
   /* --- gewichtsgrafiek met BMI-zones op de achtergrond --- */
   // De BMI-schaal wordt omgerekend naar kilogram via gewicht = BMI × lengte².
-  // Vanuit het midden naar buiten: heel groen -> lichter groen -> geel ->
-  // licht oranje -> donker oranje, en donkerrood buiten 18,5 – 24,9.
+  // Vanuit het midden naar buiten: groen -> geel -> oranje, en rood
+  // buiten 18,5 – 24,9.
   let zones = [], grenzen = [], vastBereik = null;
   if (lengte) {
     const kg = (bmi) => bmi * lengte * lengte;
     BMI_BANDKLEUREN.forEach((kleur, i) => {
       // Elke kleur bestaat twee keer: één band onder en één boven het midden.
-      // Opaciteit 0.28: helder genoeg om op de donkere achtergrond te lezen.
-      zones.push({ van: kg(BMI_MIDDEN + i * BMI_BANDBREEDTE), tot: kg(BMI_MIDDEN + (i + 1) * BMI_BANDBREEDTE), kleur, opaciteit: 0.28 });
-      zones.push({ van: kg(BMI_MIDDEN - (i + 1) * BMI_BANDBREEDTE), tot: kg(BMI_MIDDEN - i * BMI_BANDBREEDTE), kleur, opaciteit: 0.28 });
+      // Opaciteit 0.38: licht genoeg om qua zwaarte aan te sluiten op het
+      // rode buitenvlak (dat op 0.5 staat).
+      zones.push({ van: kg(BMI_MIDDEN + i * BMI_BANDBREEDTE), tot: kg(BMI_MIDDEN + (i + 1) * BMI_BANDBREEDTE), kleur, opaciteit: 0.38 });
+      zones.push({ van: kg(BMI_MIDDEN - (i + 1) * BMI_BANDBREEDTE), tot: kg(BMI_MIDDEN - i * BMI_BANDBREEDTE), kleur, opaciteit: 0.38 });
     });
     // Buiten het gezonde bereik (tot ver buiten beeld): hetzelfde rood, maar
     // duidelijk zwaarder aangezet dan de banden erbinnen.

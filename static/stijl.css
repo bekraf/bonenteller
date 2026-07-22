@@ -39,9 +39,16 @@
   --kcal-goed: #0ca30c;
   --kcal-onder: #fab219;
   --kcal-boven: #d03b3b;
-  /* Buitenste BMI-band bínnen het gezonde bereik: oranje tussenstap tussen
-     het geel en het rode onder-/overgewichtvlak (zachte band, 28% dekking). */
-  --bmi-tussen: #e5762a;
+  /* BMI-zones in de gewichtsgrafiek: drie tinten binnen het gezonde bereik
+     (groen rond het midden, geel verder weg, oranje aan de rand) plus het
+     rood erbuiten. Zacht gerenderd op 38% (banden) en 50% (buiten), zodat
+     de banden qua zwaarte aansluiten op het rode buitenvlak (±#722A24). */
+  --bmi-groen: #7cc97e;
+  --bmi-geel: #e6c058;
+  --bmi-oranje: #e8863e;
+  --bmi-buiten: #c23a34;
+  /* De gewichtslijn zelf (licht warm oranje i.p.v. het blauwe --reeks-1). */
+  --gewichtslijn: #f9ab57;
   /* NOVA-groepen (1 = onbewerkt ... 4 = ultrabewerkt) */
   --nova1: #58b85c;
   --nova2: #dfa62b;
