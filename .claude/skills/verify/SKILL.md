@@ -13,18 +13,25 @@ Geen dependencies, geen build. Frontend = `static/app.js` + `static/index.html`.
 
 ## Browser aansturen (headless)
 - `localhost` resolvet NIET in de sandbox — gebruik overal `127.0.0.1`.
-- Selenium + chromedriver werkt hier niet (kan service niet spawnen); direct
-  chromium of CDP wel.
-- Snelle screenshot zonder interactie:
+- Chromium, chromedriver, geckodriver en pip zijn er NIET (meer); alleen
+  Firefox. Aansturen kan met stdlib-Python via Marionette (TCP+JSON op poort
+  2828): werkende client staat hiernaast in `marionette.py` (importeer de
+  klasse, of draai `python3 marionette.py <url> "<js met return>"`).
+- Starten (profielmap MOET vooraf bestaan, anders start Firefox stil zonder
+  Marionette-listener):
   ```bash
-  chromium --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
-    --window-size=1400,1600 --virtual-time-budget=4000 \
-    --screenshot=uit.png "http://127.0.0.1:8377/?dagen=30"
+  mkdir -p <scratchpad>/ffprofiel
+  MOZ_HEADLESS=1 firefox --headless --no-remote --marionette \
+    --profile <scratchpad>/ffprofiel about:blank &
+  # wachten tot `ss -tln | grep 2828` raak is, dan verbinden
   ```
-- Klikken/JS nodig? Start chromium met `--remote-debugging-port=9222
-  --remote-allow-origins=* --user-data-dir=<scratchpad>/profiel` en praat CDP
-  via `websocket-client` (pip). Werkend voorbeeldscript: zie eerdere sessie
-  (Runtime.evaluate voor klikken + uitlezen, Page.captureScreenshot).
+- Protocol: pakketten `<lengte>:<json>`; commando `[0, msgid, naam, params]`,
+  antwoord `[1, msgid, fout, resultaat]`. Nuttige commando's:
+  `WebDriver:NewSession`, `WebDriver:Navigate`, `WebDriver:ExecuteScript`
+  (script met `return ...`), `Marionette:Quit` (sluit Firefox echt af —
+  daarna opnieuw starten voor een volgende run).
+- Screenshot zonder interactie kan ook: `firefox --headless
+  --window-size=1400,1600 --screenshot uit.png "http://127.0.0.1:8377/"`.
 
 ## Muteren? Test op een kopie
 `gezondheid.db` is de echte data van de gebruiker. Voor tests die schrijven:

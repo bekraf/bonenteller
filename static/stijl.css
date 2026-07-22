@@ -185,7 +185,8 @@ main { padding: 16px 24px 48px; max-width: 1180px; margin: 0 auto; }
 .grafiek .gridlijn { stroke: var(--gridlijn); stroke-width: 1; }
 .grafiek .aslijn { stroke: var(--aslijn); stroke-width: 1; }
 .grafiek .doellijn { stroke: var(--gedempt); stroke-width: 1; stroke-dasharray: 4 3; }
-.grafiek .doeltekst { fill: var(--inkt-2); font-size: 11px; }
+/* 9px i.p.v. 11px: "max 2.600" moet in de rechtermarge (±50px) passen. */
+.grafiek .doeltekst { fill: var(--inkt-2); font-size: 9px; }
 .grafiek .kruisdraad { stroke: var(--aslijn); stroke-width: 1; }
 /* BMI-grenslijnen (onder-/overgewicht) in de gewichtsgrafiek: gedempt
    goudbruin, los van --slecht. */
@@ -285,6 +286,12 @@ td.gedempt { color: var(--gedempt); }
 .legende { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
 .legende .sleutel { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--inkt-2); }
 .legende .vlak { width: 12px; height: 12px; border-radius: 3px; }
+
+/* Klikbaar legende-item (weekgemiddeldelijn aan/uit): gedimd als de lijn
+   verborgen is; de grafiekhouder krijgt dan de klasse 'zonder-gemlijn'. */
+.legende .sleutel.klikbaar { cursor: pointer; user-select: none; }
+.legende .sleutel.uit { opacity: 0.45; }
+.zonder-gemlijn .gemlijn { display: none; }
 
 /* Formulieren */
 form.regel {

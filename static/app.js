@@ -371,6 +371,15 @@ function verbergZweefinfo() {
   zweefinfo.style.display = "none";
 }
 
+// Klik buiten de grafieken (en buiten het venster zelf): vastgeklikt punt
+// loslaten, zodat een tik "ergens anders" het venster op mobiel weer sluit.
+document.addEventListener("click", (e) => {
+  if (zweefVast && !e.target.closest?.(".grafiek, .zweefinfo")) {
+    zweefVast.laatLos();
+    verbergZweefinfo();
+  }
+});
+
 // Kies een "nette" stapgrootte voor de y-as (1, 2, 2.5, 5, 10, 20, 500, ...)
 // zodat de aslabels ronde getallen zijn.
 function nietteStappen(maxW, aantal = 5) {
@@ -724,10 +733,21 @@ function lijnGrafiek(houder, punten, opties = {}) {
      minLijn / minLabel — horizontale richtlijn onder (bv. min 1.800 kcal)
      kleurVan           — functie waarde -> kleur, om elke staaf te kleuren
                           naargelang de waarde (anders de standaardblauw)
+     gemLijn            — [{datum, waarde}]: vloeiende lijn bovenop de staven
+                          (bv. het weekgemiddelde), één punt per week in het
+                          midden van die week
      bijKlik            — functie (punt) => ...; maakt elke dagband klikbaar
-                          (handwijzer) */
+                          (handwijzer); op aanraakschermen zet een eerste tik
+                          eerst het zweefvenster vast en voert pas een tweede
+                          tik op dezelfde staaf de klikactie uit */
 function staafGrafiek(houder, punten, opties = {}) {
   houder.replaceChildren();
+  // Net als bij de lijngrafiek: een vastgeklikte staaf uit de vorige tekening
+  // hoort bij de net vervangen SVG en moet losgelaten worden.
+  if (zweefVast && zweefVast.houder === houder) {
+    zweefVast = null;
+    verbergZweefinfo();
+  }
   if (!punten.length) {
     houder.append(el("p", { class: "subtitel" }, "Geen gegevens in deze periode."));
     return;
@@ -752,6 +772,14 @@ function staafGrafiek(houder, punten, opties = {}) {
   const svg = svgEl("svg", { viewBox: `0 0 ${B} ${H}`, width: B, height: H });
   const g = svgEl("g", { transform: `translate(${m.l},${m.t})` });
   svg.append(g);
+
+  // Vastklikken (vooral voor de telefoon, waar hover onhandig is): een tik op
+  // een staaf zet het zweefvenster vast, verankerd aan de staaftop. Of de
+  // laatste aanraking een vinger was, onthouden we per pointerdown — het
+  // click-event zelf draagt niet overal een pointerType.
+  let aanraking = false;
+  svg.addEventListener("pointerdown", (e) => { aanraking = e.pointerType === "touch"; });
+  let vastPunt = null;   // het vastgeklikte punt van déze grafiek, of null
 
   // Grid + y-aslabels.
   for (let w = 0; w <= yMax + 1e-9; w += stap) {
@@ -797,18 +825,59 @@ function staafGrafiek(houder, punten, opties = {}) {
     // te raken dan een dun staafje. Bij hover licht de staaf op en verschijnt
     // het zweefvenster; met 'bijKlik' is de band ook klikbaar (handwijzer).
     const hit = svgEl("rect", { x: i * band, y: 0, width: band, height: bh, fill: "transparent" });
-    if (opties.bijKlik) {
-      hit.setAttribute("cursor", "pointer");
-      hit.addEventListener("click", () => opties.bijKlik(p));
-    }
-    hit.addEventListener("pointermove", (e) => {
+    const regels = () => {
+      const r = [[`${fmt0.format(p.waarde)} kcal`, "zw-waarde"], [datumLang(p.datum), "zw-label"]];
+      if (p.week) r.push([p.week, "zw-label"]);
+      if (p.detail) r.push([p.detail, "zw-label"]);
+      if (p.notitie) r.push([`📝 ${p.notitie}`, "zw-notitie"]);
+      return r;
+    };
+    // Vastgezette weergave: opgelichte staaf, venster verankerd aan de
+    // staaftop in plaats van aan de aanwijzer (zelfde idee als de lijngrafiek).
+    const toonVast = () => {
       staaf.setAttribute("opacity", "0.75");
-      const regels = [[`${fmt0.format(p.waarde)} kcal`, "zw-waarde"], [datumLang(p.datum), "zw-label"]];
-      if (p.detail) regels.push([p.detail, "zw-label"]);
-      if (p.notitie) regels.push([`📝 ${p.notitie}`, "zw-notitie"]);
-      toonZweefinfo(e.clientX, e.clientY, regels);
+      const rect = svg.getBoundingClientRect();
+      toonZweefinfo(
+        rect.left + ((m.l + i * band + band / 2) / B) * rect.width,
+        rect.top + ((m.t + y) / H) * rect.height,
+        regels());
+    };
+    const laatLos = () => {
+      staaf.removeAttribute("opacity");
+      vastPunt = null;
+      if (zweefVast && zweefVast.houder === houder) zweefVast = null;
+    };
+    if (opties.bijKlik) hit.setAttribute("cursor", "pointer");
+    hit.addEventListener("click", () => {
+      if (aanraking && vastPunt !== p) {
+        // Eerste tik met een vinger: zweefvenster vastzetten; de klikactie
+        // volgt pas bij een tweede tik op dezelfde staaf. Eén vastgezet
+        // venster tegelijk over alle grafieken heen.
+        if (zweefVast) zweefVast.laatLos();
+        vastPunt = p;
+        zweefVast = { houder, toon: toonVast, laatLos };
+        toonVast();
+      } else if (opties.bijKlik) {
+        // Muisklik, of tweede tik op de vastgeklikte staaf: venster eerst
+        // opruimen (anders blijft het over het dagboek hangen), dan de actie.
+        laatLos();
+        verbergZweefinfo();
+        opties.bijKlik(p);
+      } else if (vastPunt === p) {
+        // Tweede tik zonder klikactie: gewoon weer loslaten.
+        laatLos();
+        verbergZweefinfo();
+      }
+    });
+    hit.addEventListener("pointermove", (e) => {
+      // Hover over een ándere staaf laat het vastgeklikte punt los.
+      if (vastPunt && vastPunt !== p && zweefVast) zweefVast.laatLos();
+      if (vastPunt === p) { toonVast(); return; }
+      staaf.setAttribute("opacity", "0.75");
+      toonZweefinfo(e.clientX, e.clientY, regels());
     });
     hit.addEventListener("pointerleave", () => {
+      if (vastPunt === p) { toonVast(); return; }
       staaf.removeAttribute("opacity");
       verbergZweefinfo();
     });
@@ -825,6 +894,44 @@ function staafGrafiek(houder, punten, opties = {}) {
     const y = yVan(opties.minLijn);
     g.append(svgEl("line", { x1: 0, x2: bw, y1: y, y2: y, class: "doellijn" }));
     g.append(svgEl("text", { x: bw + 6, y: y + 4, class: "doeltekst" }, opties.minLabel || ""));
+  }
+
+  // Vloeiende gemiddeldelijn bovenop de staven (één punt per week, in het
+  // midden van die week). Catmull-Rom -> Bézier voor een rustige boog, in
+  // dezelfde stijl als de gewichtslijn: goudbruin met een donkere rand
+  // (halo) zodat de lijn loskomt van de gekleurde staven. 'pointer-events:
+  // none' zodat de lijn de hover op de dagbanden niet blokkeert.
+  if (opties.gemLijn && opties.gemLijn.length) {
+    const index = new Map(punten.map((p, i) => [p.datum, i]));
+    const pts = opties.gemLijn
+      .filter((p) => index.has(p.datum))
+      .map((p) => [index.get(p.datum) * band + band / 2, yVan(p.waarde)]);
+    if (pts.length === 1) {
+      // Eén week in beeld: geen lijn te trekken, dan maar een bolletje.
+      g.append(svgEl("circle", {
+        cx: pts[0][0], cy: pts[0][1], r: 4, fill: "var(--gewichtslijn)",
+        stroke: "var(--gewichtslijn-rand)", "stroke-width": 1.5, "pointer-events": "none",
+        class: "gemlijn",
+      }));
+    } else if (pts.length > 1) {
+      let pad = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+      for (let i = 1; i < pts.length; i++) {
+        const p0 = pts[Math.max(i - 2, 0)], p1 = pts[i - 1],
+              p2 = pts[i], p3 = pts[Math.min(i + 1, pts.length - 1)];
+        const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+        const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+        pad += `C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ` +
+               `${c2[0].toFixed(1)},${c2[1].toFixed(1)} ` +
+               `${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+      }
+      for (const [breedte, kleur] of [[4, "var(--gewichtslijn-rand)"], [2, "var(--gewichtslijn)"]]) {
+        g.append(svgEl("path", {
+          d: pad, fill: "none", stroke: kleur, "stroke-width": breedte,
+          "stroke-linejoin": "round", "stroke-linecap": "round", "pointer-events": "none",
+          class: "gemlijn",
+        }));
+      }
+    }
   }
 
   houder.append(svg);
@@ -1187,14 +1294,41 @@ async function laadDashboard() {
   document.getElementById("kcal-subtitel").textContent =
     (onderrapportagePct
       ? `kcal per dag incl. ${fmt.format(onderrapportagePct)}% onderrapportage`
-      : "kcal gegeten per dag") + ", gekleurd t.o.v. de richtlijn";
+      : "kcal gegeten per dag") + ", gekleurd t.o.v. de richtlijn — lijn = weekgemiddelde (vr t/m do)";
+
+  // Weekgemiddelde bovenop de staven: weken lopen van vrijdag t/m donderdag
+  // (weegdag tot weegdag, zoals het weekoverzicht), zodat de lijn hetzelfde
+  // ritme volgt als de wegingen. Alleen eetdagen (kcal > 0) tellen mee, net
+  // als in de Gem. kcal-tegel; weekend-pieken en doordeweekse dalen middelen
+  // zo uit tot één rustig verloop. Randweken die maar half in beeld staan,
+  // middelen over de zichtbare dagen.
+  const dagenPerWeek = new Map();   // vrijdag -> dagen van die week in beeld
+  for (const d of alleDagen) {
+    const start = weekStartVan(d.datum);
+    if (!dagenPerWeek.has(start)) dagenPerWeek.set(start, []);
+    dagenPerWeek.get(start).push(d);
+  }
+  const weekGem = new Map();        // vrijdag -> gemiddelde kcal per eetdag
+  const gemLijn = [];               // één lijnpunt in het midden van elke week
+  for (const [start, weekDagen] of dagenPerWeek) {
+    const eetdagen = weekDagen.filter((d) => d.kcal > 0);
+    if (!eetdagen.length) continue;
+    const gem = eetdagen.reduce((s, d) => s + metOnderrapportage(d.kcal), 0) / eetdagen.length;
+    weekGem.set(start, gem);
+    gemLijn.push({ datum: weekDagen[Math.floor((weekDagen.length - 1) / 2)].datum, waarde: gem });
+  }
+
   staafGrafiek(document.getElementById("grafiek-kcal"),
     alleDagen.map((d) => ({
       datum: d.datum, waarde: metOnderrapportage(d.kcal),
+      week: weekGem.has(weekStartVan(d.datum))                // weekgemiddelde
+        ? `week gem. ${fmt0.format(weekGem.get(weekStartVan(d.datum)))} kcal per eetdag`
+        : "",
       detail: d.sport.map(sportTekst).join(" · "),  // sport in het zweefvenster
       notitie: notities[d.datum],                   // dagnotitie idem
     })),
     {
+      gemLijn,
       kleurVan: kcalMin != null || kcalMax != null ? kcalKleur : null,
       maxLijn: kcalMax, maxLabel: kcalMax ? `max ${fmt0.format(kcalMax)}` : "",
       minLijn: kcalMin, minLabel: kcalMin ? `min ${fmt0.format(kcalMin)}` : "",
@@ -1208,11 +1342,24 @@ async function laadDashboard() {
     });
 
   // Legende bij de kcal-grafiek (kleur draagt hier betekenis).
+  // Het weekgemiddelde-item is klikbaar: het schakelt de lijn aan/uit via een
+  // CSS-klasse op de grafiekhouder — die div overleeft een periodewissel,
+  // dus de keuze blijft staan tot de pagina herlaadt.
+  const kcalHouder = document.getElementById("grafiek-kcal");
+  const gemUit = kcalHouder.classList.contains("zonder-gemlijn");
   document.getElementById("legende-kcal").replaceChildren(
     ...[["var(--kcal-goed)", "binnen richtlijn"], ["var(--kcal-onder)", "onder min"],
         ["var(--kcal-boven)", "boven max"]]
       .map(([kleur, label]) => el("span", { class: "sleutel" },
-        el("span", { class: "vlak", style: `background:${kleur}` }), label)));
+        el("span", { class: "vlak", style: `background:${kleur}` }), label)),
+    el("span", {
+      class: "sleutel klikbaar" + (gemUit ? " uit" : ""),
+      title: "klik om de gemiddeldelijn te tonen of te verbergen",
+      onclick: (e) => {
+        kcalHouder.classList.toggle("zonder-gemlijn");
+        e.currentTarget.classList.toggle("uit");
+      },
+    }, el("span", { class: "vlak", style: "background:var(--gewichtslijn)" }), "weekgemiddelde"));
 
   /* --- sportgrafiek: minuten per dag, kleur per type --- */
   sportGrafiek(document.getElementById("grafiek-sport"), alleDagen);
