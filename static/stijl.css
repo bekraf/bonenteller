@@ -260,6 +260,11 @@ tr.klikbaar:hover td { background: rgba(137, 56, 15, 0.3); }
    in het dagboek): bewerken door erop te klikken */
 .klik-bewerk { cursor: pointer; }
 .klik-bewerk:hover { color: var(--inkt); text-decoration: underline dotted; }
+/* "Incl."-schakelaar naast de huidige dag in het weekoverzicht (easter egg):
+   gedempt zolang vandaag niet meetelt, crème zodra hij aan staat. */
+.incl-schakel { color: var(--gedempt); cursor: pointer; user-select: none; }
+.incl-schakel:hover { text-decoration: underline dotted; }
+.incl-schakel.actief { color: var(--inkt); }
 tr.totaalrij td { font-weight: 600; border-top: 1px solid var(--aslijn); }
 tr.doelrij td { color: var(--gedempt); font-size: 12px; border-bottom: none; }
 td.gedempt { color: var(--gedempt); }

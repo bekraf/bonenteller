@@ -1786,6 +1786,9 @@ document.getElementById("form-gewicht").addEventListener("submit", async (e) => 
    week 1 begon op vrijdag 2 januari 2026. */
 const WEEK1_START = "2026-01-02";
 let weekStart = weekStartVan(vandaag());   // vrijdag van de getoonde week
+// Easter egg: klik op "Incl." naast de huidige dag om vandaag tóch mee te
+// tellen in het weekgemiddelde. Staat standaard uit en reset bij herladen.
+let inclVandaag = false;
 
 // De vrijdag op of vóór een gegeven datum.
 function weekStartVan(iso) {
@@ -1844,9 +1847,11 @@ async function laadWeek() {
     const d = perDatum[datum];
     const naamDag = naarDatum(datum).toLocaleDateString("nl-BE", { weekday: "long" });
     // Vandaag is nog niet af: wel tonen, maar niet toetsen aan de
-    // richtlijnen en niet meetellen in het weekgemiddelde.
+    // richtlijnen en niet meetellen in het weekgemiddelde — tenzij de
+    // "Incl."-schakelaar aan staat, dan telt vandaag gewoon mee.
     const isVandaag = datum === vandaag();
-    if (d && d.kcal > 0 && !isVandaag) {
+    const teltMee = d && d.kcal > 0 && (!isVandaag || inclVandaag);
+    if (teltMee) {
       dagenMetEten += 1;
       NUTRIENTEN.forEach((k) => { som[k] += d[k]; });
       for (let groep = 1; groep <= 4; groep++) novaSom[groep] += d.nova_kcal[String(groep)] || 0;
@@ -1864,11 +1869,16 @@ async function laadWeek() {
       },
     },
       el("td", {}, naamDag.charAt(0).toUpperCase() + naamDag.slice(1),
-        isVandaag ? el("span", { class: "gedempt" }, " · vandaag") : ""),
+        isVandaag ? el("span", {
+          class: "incl-schakel" + (inclVandaag ? " actief" : ""),
+          title: inclVandaag ? "Vandaag telt mee met het gemiddelde"
+                             : "Tel vandaag mee met het gemiddelde",
+          onclick: (e) => { e.stopPropagation(); inclVandaag = !inclVandaag; laadWeek(); },
+        }, " · Incl.") : ""),
       el("td", { class: "gedempt" }, datumKort(datum)),
       ...NUTRIENTEN.map((k) =>
-        d && d.kcal > 0 && !isVandaag ? nutrientCel(k, d[k], fmt0, false)
-                        : el("td", { class: "getal gedempt" }, d ? fmt0.format(d[k]) : "")),
+        teltMee ? nutrientCel(k, d[k], fmt0, false)
+                : el("td", { class: "getal gedempt" }, d ? fmt0.format(d[k]) : "")),
       d && d.kcal > 0 ? novaCel(d.nova_kcal, d.kcal) : el("td", {}),
       el("td", {}, d ? d.sport.map(sportTekst).join(" · ") : "")));
   }
