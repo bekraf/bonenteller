@@ -896,51 +896,60 @@ function staafGrafiek(houder, punten, opties = {}) {
     g.append(svgEl("text", { x: bw + 6, y: y + 4, class: "doeltekst" }, opties.minLabel || ""));
   }
 
-  // Vloeiende gemiddeldelijn bovenop de staven (één punt per week, in het
-  // midden van die week). Catmull-Rom -> Bézier voor een rustige boog, in
-  // dezelfde stijl als de gewichtslijn: goudbruin met een donkere rand
-  // (halo) zodat de lijn loskomt van de gekleurde staven. 'pointer-events:
-  // none' zodat de lijn de hover op de dagbanden niet blokkeert.
-  if (opties.gemLijn && opties.gemLijn.length) {
-    const index = new Map(punten.map((p, i) => [p.datum, i]));
-    const pts = opties.gemLijn
-      .filter((p) => index.has(p.datum))
-      .map((p) => [index.get(p.datum) * band + band / 2, yVan(p.waarde)]);
-    if (pts.length === 1) {
-      // Eén week in beeld: geen lijn te trekken, dan maar een bolletje.
-      g.append(svgEl("circle", {
-        cx: pts[0][0], cy: pts[0][1], r: 4, fill: "var(--gewichtslijn)",
-        stroke: "var(--gewichtslijn-rand)", "stroke-width": 1.5, "pointer-events": "none",
-        class: "gemlijn",
-      }));
-    } else if (pts.length > 1) {
-      let pad = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
-      for (let i = 1; i < pts.length; i++) {
-        const p0 = pts[Math.max(i - 2, 0)], p1 = pts[i - 1],
-              p2 = pts[i], p3 = pts[Math.min(i + 1, pts.length - 1)];
-        const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
-        const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
-        pad += `C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ` +
-               `${c2[0].toFixed(1)},${c2[1].toFixed(1)} ` +
-               `${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
-      }
-      for (const [breedte, kleur] of [[4, "var(--gewichtslijn-rand)"], [2, "var(--gewichtslijn)"]]) {
-        g.append(svgEl("path", {
-          d: pad, fill: "none", stroke: kleur, "stroke-width": breedte,
-          "stroke-linejoin": "round", "stroke-linecap": "round", "pointer-events": "none",
-          class: "gemlijn",
-        }));
-      }
-    }
-  }
+  if (opties.gemLijn && opties.gemLijn.length) tekenGemLijn(g, opties.gemLijn, punten, band, yVan);
 
   houder.append(svg);
+}
+
+/* Vloeiende gemiddeldelijn bovenop de staven (één punt per week, in het
+   midden van die week) — gedeeld door de kcal- en de sportgrafiek.
+   Catmull-Rom -> Bézier voor een rustige boog, in dezelfde stijl als de
+   gewichtslijn: goudbruin met een donkere rand (halo) zodat de lijn loskomt
+   van de gekleurde staven. 'pointer-events: none' zodat de lijn de hover op
+   de dagbanden niet blokkeert; klasse 'gemlijn' zodat het legende-item de
+   lijn via 'zonder-gemlijn' op de grafiekhouder kan verbergen. */
+function tekenGemLijn(g, gemLijn, punten, band, yVan) {
+  const index = new Map(punten.map((p, i) => [p.datum, i]));
+  const pts = gemLijn
+    .filter((p) => index.has(p.datum))
+    .map((p) => [index.get(p.datum) * band + band / 2, yVan(p.waarde)]);
+  if (pts.length === 1) {
+    // Eén week in beeld: geen lijn te trekken, dan maar een bolletje.
+    g.append(svgEl("circle", {
+      cx: pts[0][0], cy: pts[0][1], r: 4, fill: "var(--gewichtslijn)",
+      stroke: "var(--gewichtslijn-rand)", "stroke-width": 1.5, "pointer-events": "none",
+      class: "gemlijn",
+    }));
+  } else if (pts.length > 1) {
+    let pad = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+    for (let i = 1; i < pts.length; i++) {
+      const p0 = pts[Math.max(i - 2, 0)], p1 = pts[i - 1],
+            p2 = pts[i], p3 = pts[Math.min(i + 1, pts.length - 1)];
+      const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+      const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+      pad += `C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ` +
+             `${c2[0].toFixed(1)},${c2[1].toFixed(1)} ` +
+             `${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+    }
+    for (const [breedte, kleur] of [[4, "var(--gewichtslijn-rand)"], [2, "var(--gewichtslijn)"]]) {
+      g.append(svgEl("path", {
+        d: pad, fill: "none", stroke: kleur, "stroke-width": breedte,
+        "stroke-linejoin": "round", "stroke-linecap": "round", "pointer-events": "none",
+        class: "gemlijn",
+      }));
+    }
+  }
 }
 
 /* Sportgrafiek: gestapelde staven, minuten per dag, kleur per type.
    Elke activiteit houdt altijd zijn eigen kleur (hardlopen is altijd blauw,
    ook als er die periode niet gelopen is) — zo leer je de kleuren één keer.
-   dagen = de dagarray van /api/dagen (elke dag heeft een sport-lijst). */
+   dagen = de dagarray van /api/dagen (elke dag heeft een sport-lijst).
+   opties:
+     gemLijn   — [{datum, waarde}]: vloeiende weekgemiddeldelijn bovenop de
+                 staven, zoals bij de kcal-grafiek
+     weekTekst — functie datum -> tekstregel over de week van die datum,
+                 als extra regel in het zweefvenster */
 // De kleur per type komt uit een CSS-variabele (standaard in stijl.css,
 // aanpasbaar op het Instellingen-tabblad); de legende en het zweefvenster
 // benoemen de types.
@@ -953,8 +962,14 @@ const SPORT_KLEUREN = {
 };
 const SPORT_VOLGORDE = ["lopen", "krachttraining", "fietsen", "zwemmen", "overig"];
 
-function sportGrafiek(houder, dagen) {
+function sportGrafiek(houder, dagen, opties = {}) {
   houder.replaceChildren();
+  // Een vastgeklikte staaf uit de vorige tekening hoort bij de net vervangen
+  // SVG en moet losgelaten worden (zelfde opruiming als bij de staafgrafiek).
+  if (zweefVast && zweefVast.houder === houder) {
+    zweefVast = null;
+    verbergZweefinfo();
+  }
   if (!dagen.length) {
     houder.append(el("p", { class: "subtitel" }, "Geen gegevens in deze periode."));
     return;
@@ -982,6 +997,14 @@ function sportGrafiek(houder, dagen) {
   const svg = svgEl("svg", { viewBox: `0 0 ${B} ${H}`, width: B, height: H });
   const g = svgEl("g", { transform: `translate(${m.l},${m.t})` });
   svg.append(g);
+
+  // Vastklikken (vooral voor de telefoon, waar hover onhandig is): een tik op
+  // een staaf zet het zweefvenster vast, verankerd aan de staaftop — zelfde
+  // gedrag als de kcal-grafiek. Of de laatste aanraking een vinger was,
+  // onthouden we per pointerdown.
+  let aanraking = false;
+  svg.addEventListener("pointerdown", (e) => { aanraking = e.pointerType === "touch"; });
+  let vastPunt = null;   // het vastgeklikte punt van déze grafiek, of null
 
   // Grid + y-aslabels, met de eenheid erbij ("20 min", "40 min", ...).
   for (let w = 0; w <= yMax + 1e-9; w += stap) {
@@ -1039,20 +1062,60 @@ function sportGrafiek(houder, dagen) {
 
     // Aanwijsvlak over de hele band: zweefvenster met totaal + elke activiteit.
     const hit = svgEl("rect", { x: i * band, y: 0, width: band, height: bh, fill: "transparent" });
-    hit.addEventListener("pointermove", (e) => {
-      groep.setAttribute("opacity", "0.75");
-      const regels = p.totaal > 0
+    const regels = () => {
+      const r = p.totaal > 0
         ? [[`${fmt0.format(p.totaal)} min sport`, "zw-waarde"], [datumLang(p.datum), "zw-label"],
            ...p.sport.map((s) => [sportTekst(s), "zw-label"])]
         : [["Geen sport", "zw-waarde"], [datumLang(p.datum), "zw-label"]];
-      toonZweefinfo(e.clientX, e.clientY, regels);
+      const week = opties.weekTekst && opties.weekTekst(p.datum);
+      if (week) r.push([week, "zw-label"]);
+      return r;
+    };
+    // Vastgezette weergave: opgelichte staaf, venster verankerd aan de
+    // staaftop in plaats van aan de aanwijzer (zelfde idee als de kcal-grafiek).
+    const toonVast = () => {
+      groep.setAttribute("opacity", "0.75");
+      const rect = svg.getBoundingClientRect();
+      toonZweefinfo(
+        rect.left + ((m.l + i * band + band / 2) / B) * rect.width,
+        rect.top + ((m.t + yVan(p.totaal)) / H) * rect.height,
+        regels());
+    };
+    const laatLos = () => {
+      groep.removeAttribute("opacity");
+      vastPunt = null;
+      if (zweefVast && zweefVast.houder === houder) zweefVast = null;
+    };
+    hit.addEventListener("click", () => {
+      if (aanraking && vastPunt !== p) {
+        // Eerste tik met een vinger: zweefvenster vastzetten. Eén vastgezet
+        // venster tegelijk over alle grafieken heen.
+        if (zweefVast) zweefVast.laatLos();
+        vastPunt = p;
+        zweefVast = { houder, toon: toonVast, laatLos };
+        toonVast();
+      } else if (vastPunt === p) {
+        // Tweede tik op dezelfde staaf: weer loslaten.
+        laatLos();
+        verbergZweefinfo();
+      }
+    });
+    hit.addEventListener("pointermove", (e) => {
+      // Hover over een ándere staaf laat het vastgeklikte punt los.
+      if (vastPunt && vastPunt !== p && zweefVast) zweefVast.laatLos();
+      if (vastPunt === p) { toonVast(); return; }
+      groep.setAttribute("opacity", "0.75");
+      toonZweefinfo(e.clientX, e.clientY, regels());
     });
     hit.addEventListener("pointerleave", () => {
+      if (vastPunt === p) { toonVast(); return; }
       groep.removeAttribute("opacity");
       verbergZweefinfo();
     });
     g.append(hit);
   });
+
+  if (opties.gemLijn && opties.gemLijn.length) tekenGemLijn(g, opties.gemLijn, punten, band, yVan);
 
   houder.append(svg);
 }
@@ -1060,7 +1123,7 @@ function sportGrafiek(houder, dagen) {
 /* ================= 4. Dashboard ================= */
 
 let instellingen = {};   // doelgewicht, lengte, richtlijnen — geladen bij start
-let filterDagen = "jaar"; // actieve periodefilter (0 = alles, "jaar" = sinds 1 januari)
+let filterDagen = 30;    // actieve periodefilter (0 = alles, "jaar" = sinds 1 januari)
 
 // Periodeknoppen: één filterrij die alles op het dashboard herschaalt.
 document.getElementById("bereikfilters").addEventListener("click", (e) => {
@@ -1075,8 +1138,8 @@ document.getElementById("bereikfilters").addEventListener("click", (e) => {
 /* --- BMI-hulpjes -------------------------------------------------------
    Het gezonde BMI-bereik is 18,5 – 24,9 met 21,7 als midden. Vanuit dat
    midden naar buiten lopen vijf kleurbanden (heel groen -> donker oranje);
-   buiten het gezonde bereik is het donkerrood. Dezelfde schaal kleurt de
-   achtergrond van de gewichtsgrafiek én de tegels bovenaan. */
+   buiten het gezonde bereik is het donkerrood. Deze schaal kleurt de
+   achtergrond van de gewichtsgrafiek. */
 // Drie tinten binnen het gezonde bereik (de --bmi-*-variabelen in
 // stijl.css): groen rond het midden, geel verder weg, oranje aan de rand —
 // warme tinten die aansluiten op het rode onder-/overgewichtvlak.
@@ -1085,14 +1148,6 @@ const BMI_BANDKLEUREN = ["var(--bmi-groen)", "var(--bmi-groen)",
   "var(--bmi-geel)", "var(--bmi-geel)", "var(--bmi-oranje)"];
 const BMI_BANDBREEDTE = (BMI_MIDDEN - BMI_ONDER) / BMI_BANDKLEUREN.length; // 0,64 BMI
 const BMI_BUITEN = "var(--bmi-buiten)";   // onder-/overgewicht (vol aangezet)
-
-function bmiKleur(bmi) {
-  if (bmi < BMI_ONDER || bmi > BMI_BOVEN) return "var(--slecht)"; // leesbaar rood als tekst
-  const band = Math.min(
-    Math.floor(Math.abs(bmi - BMI_MIDDEN) / BMI_BANDBREEDTE),
-    BMI_BANDKLEUREN.length - 1);
-  return BMI_BANDKLEUREN[band];
-}
 
 async function laadDashboard() {
   // Alle statistieken lopen t/m GISTEREN: vandaag is nog niet af (na het
@@ -1130,8 +1185,8 @@ async function laadDashboard() {
   const gewichtBereik = gewichten.filter((g) => g.datum >= van);
 
   /* --- statustegels bovenaan ---
-     Gewicht/doel/BMI tonen altijd de recentste meting, maar het
-     gewichtsverschil en de kcal-/sporttegels volgen de gekozen periode. */
+     Het huidige gewicht en de doelafstand volgen de recentste meting; de
+     BMI-, kcal- en sporttegels middelen over de gekozen periode. */
   const tegels = document.getElementById("tegels");
   tegels.replaceChildren();
   const doel = instellingen.doelgewicht_kg;
@@ -1139,69 +1194,51 @@ async function laadDashboard() {
 
   if (gewichten.length) {
     const laatste = gewichten[gewichten.length - 1];
-    const bmi = lengte ? laatste.gewicht / (lengte * lengte) : null;
-    const kleur = bmi ? `color:${bmiKleur(bmi)}` : "";
 
-    // Tegel: huidig gewicht, gekleurd volgens de BMI-zone, met het verschil
-    // t.o.v. de eerste meting binnen de gekozen periode.
-    const tegel = el("div", { class: "tegel" },
+    // Tegel: huidig gewicht.
+    tegels.append(el("div", { class: "tegel" },
       el("div", { class: "label" }, "Huidig gewicht"),
-      el("div", { class: "waarde", style: kleur }, `${fmt.format(laatste.gewicht)} kg`));
-    const eerste = gewichtBereik[0];
-    if (eerste && eerste.datum !== laatste.datum) {
-      const d = laatste.gewicht - eerste.gewicht;
-      tegel.append(el("div", { class: "delta " + (d <= 0 ? "goed" : "slecht") },
-        `${d >= 0 ? "+" : ""}${fmt.format(d)} kg t.o.v. ${datumKort(eerste.datum)}`));
-    }
-    tegels.append(tegel);
+      el("div", { class: "waarde" }, `${fmt.format(laatste.gewicht)} kg`)));
 
-    // Tegel: doelgewicht en hoeveel er nog af moet.
+    // Tegel: hoeveel kg er nog bij (+) of af (−) moet tot het doelgewicht.
     if (doel) {
+      const d = doel - laatste.gewicht;
       tegels.append(el("div", { class: "tegel" },
         el("div", { class: "label" }, "Doelgewicht"),
-        el("div", { class: "waarde" }, `${fmt.format(doel)} kg`),
-        el("div", { class: "delta" }, `nog ${fmt.format(Math.max(laatste.gewicht - doel, 0))} kg te gaan`)));
+        el("div", { class: "waarde" }, `${d >= 0 ? "+" : ""}${fmt.format(d)} kg`)));
     }
 
-    // Tegel: BMI, in dezelfde zonekleur als de gewichtsgrafiek.
-    if (bmi) {
+    // Tegel: gemiddelde BMI over de metingen binnen de gekozen periode.
+    const bmiMetingen = gewichtBereik.length ? gewichtBereik : [laatste];
+    const gemBmi = lengte
+      ? bmiMetingen.reduce((s, g) => s + g.gewicht, 0) / bmiMetingen.length / (lengte * lengte)
+      : null;
+    if (gemBmi) {
       tegels.append(el("div", { class: "tegel" },
-        el("div", { class: "label" }, "BMI"),
-        el("div", { class: "waarde", style: kleur }, fmt.format(bmi)),
-        el("div", { class: "delta" }, "gezond: 18,5 – 24,9")));
+        el("div", { class: "label" }, "Gem. BMI"),
+        el("div", { class: "waarde" }, fmt.format(gemBmi))));
     }
   }
 
   // Tegel: gemiddelde kcal over de gekozen periode (alleen dagen waarop
-  // gegeten is tellen mee), gekleurd t.o.v. de richtlijn.
+  // gegeten is tellen mee).
   const eetDagen = dagen.filter((d) => d.kcal > 0);
   const kcalGem = eetDagen.length ? eetDagen.reduce((s, d) => s + d.kcal, 0) / eetDagen.length : 0;
-  const kcalTegelKleur =
-    instellingen.kcal_max != null && kcalGem > instellingen.kcal_max ? "var(--boven-max)"
-    : instellingen.kcal_min != null && kcalGem < instellingen.kcal_min ? "var(--onder-min)"
-    : "var(--goed)";
   tegels.append(el("div", { class: "tegel" },
-    el("div", { class: "label" }, "Gem. kcal"),
-    el("div", { class: "waarde", style: `color:${kcalTegelKleur}` }, fmt0.format(kcalGem)),
-    el("div", { class: "delta" },
-      instellingen.kcal_max ? `richtlijn: ${fmt0.format(instellingen.kcal_min || 0)} – ${fmt0.format(instellingen.kcal_max)}` : "")));
+    el("div", { class: "label" }, "Gem. Kcal"),
+    el("div", { class: "waarde" }, fmt0.format(kcalGem))));
 
-  // Tegel: gemiddelde sport per dag over de gekozen periode, met daaronder
-  // het gemiddelde per week. De kleur volgt de WHO-richtlijn van 150–300
-  // minuten beweging per week (>= 150 groen, 75–150 amber, minder rood).
+  // Tegel: gemiddelde sport per week over de gekozen periode.
   const sportMin = dagen.reduce((s, d) => s + d.sport.reduce((t, a) => t + a.duur_minuten, 0), 0);
   // Aantal dagen in de periode: vast bij een dagenfilter, sinds 1 januari bij
   // "van begin jaar", en anders (Alles) sinds de eerste dag met gegevens.
   const periodeStart = filterDagen === "jaar" ? van : dagen.length ? dagen[0].datum : null;
   const periodeDagen = typeof filterDagen === "number" && filterDagen ? filterDagen
     : periodeStart ? Math.round((naarDatum(einde) - naarDatum(periodeStart)) / DAG_MS) + 1 : 1;
-  const minPerDag = sportMin / periodeDagen;
-  const minPerWeek = minPerDag * 7;
-  const sportKleur = minPerWeek >= 150 ? "var(--goed)" : minPerWeek >= 75 ? "var(--onder-min)" : "var(--slecht)";
+  const minPerWeek = sportMin / periodeDagen * 7;
   tegels.append(el("div", { class: "tegel" },
-    el("div", { class: "label" }, "Sport"),
-    el("div", { class: "waarde", style: `color:${sportKleur}` }, `${fmt0.format(minPerDag)} min/dag`),
-    el("div", { class: "delta" }, `${fmt0.format(minPerWeek)} min/week`)));
+    el("div", { class: "label" }, "Gem. Sport"),
+    el("div", { class: "waarde" }, `${fmt0.format(minPerWeek)} m/w`)));
 
   // Tegel: totaal gelopen kilometers binnen de gekozen periode:
   // afstand = snelheid × duur.
@@ -1210,9 +1247,8 @@ async function laadDashboard() {
     .filter((s) => s.type === "lopen" && s.snelheid_kmh)
     .reduce((som, s) => som + s.snelheid_kmh * s.duur_minuten / 60, 0);
   tegels.append(el("div", { class: "tegel" },
-    el("div", { class: "label" }, "Gelopen"),
-    el("div", { class: "waarde", style: "color:var(--sport-lopen)" }, `${fmt0.format(kmGelopen)} km`),
-    el("div", { class: "delta" }, "in deze periode")));
+    el("div", { class: "label" }, "Tot. Gelopen"),
+    el("div", { class: "waarde" }, `${fmt0.format(kmGelopen)} km`)));
 
   /* --- gedeelde x-as voor de drie grafieken ---
      Alle grafieken krijgen hetzelfde datumbereik en één band per kalenderdag,
@@ -1253,10 +1289,11 @@ async function laadDashboard() {
     zones.push({ van: kg(BMI_BOVEN), tot: kg(BMI_BOVEN) + 100, kleur: BMI_BUITEN, opaciteit: 0.5 });
     zones.push({ van: kg(BMI_ONDER) - 100, tot: kg(BMI_ONDER), kleur: BMI_BUITEN, opaciteit: 0.5 });
 
-    // Bij 'Alles' en 'Van begin jaar' zoomen we uit tot de volledige gezonde
-    // BMI-schaal, met de grenslijnen naar onder- en overgewicht in beeld. Bij
-    // kortere periodes blijft de grafiek strak inzoomen op de metingen zelf.
-    if (filterDagen === 0 || filterDagen === "jaar") {
+    // Alleen bij 'Alles' zoomen we uit tot de volledige gezonde BMI-schaal,
+    // met de grenslijnen naar onder- en overgewicht in beeld. Bij alle andere
+    // periodes ('Van begin jaar' incluis) blijft de grafiek strak inzoomen
+    // op de metingen zelf.
+    if (filterDagen === 0) {
       vastBereik = { min: kg(BMI_ONDER) - 2, max: kg(BMI_BOVEN) + 2 };
       grenzen = [
         { waarde: kg(BMI_ONDER), label: `ondergewicht — BMI ${fmt.format(BMI_ONDER)} (${fmt.format(kg(BMI_ONDER))} kg)` },
@@ -1362,15 +1399,48 @@ async function laadDashboard() {
     }, el("span", { class: "vlak", style: "background:var(--gewichtslijn)" }), "weekgemiddelde"));
 
   /* --- sportgrafiek: minuten per dag, kleur per type --- */
-  sportGrafiek(document.getElementById("grafiek-sport"), alleDagen);
+  // Weekgemiddelde: zelfde weekindeling als bij kcal (vrijdag t/m donderdag),
+  // maar álle dagen tellen mee — een rustdag is een echte nul (zelfde
+  // conventie als de Gem. Sport-tegel). De lijn staat op minuten per dag
+  // (dezelfde schaal als de staven); het zweefvenster vermeldt daarnaast het
+  // weektotaal, want "minuten per week" is het getal waar je op stuurt.
+  // Randweken die maar half in beeld staan, middelen over de zichtbare dagen.
+  const sportWeek = new Map();      // vrijdag -> { gem (min/dag), totaal (min) }
+  const sportGemLijn = [];          // één lijnpunt in het midden van elke week
+  for (const [start, weekDagen] of dagenPerWeek) {
+    const totaal = weekDagen.reduce(
+      (s, d) => s + d.sport.reduce((t, a) => t + a.duur_minuten, 0), 0);
+    const gem = totaal / weekDagen.length;
+    sportWeek.set(start, { gem, totaal });
+    sportGemLijn.push({ datum: weekDagen[Math.floor((weekDagen.length - 1) / 2)].datum, waarde: gem });
+  }
+
+  sportGrafiek(document.getElementById("grafiek-sport"), alleDagen, {
+    gemLijn: sportGemLijn,
+    weekTekst: (datum) => {
+      const w = sportWeek.get(weekStartVan(datum));
+      return w ? `week: ${fmt0.format(w.totaal)} min gesport — gem. ${fmt.format(w.gem)} min per dag` : "";
+    },
+  });
 
   // Legende: alleen de types die in deze periode voorkomen, met hun vaste
-  // kleur (een type behoudt altijd dezelfde kleur).
+  // kleur (een type behoudt altijd dezelfde kleur). Het weekgemiddelde-item
+  // is klikbaar en schakelt de lijn aan/uit, net als bij de kcal-grafiek.
+  const sportHouder = document.getElementById("grafiek-sport");
+  const sportGemUit = sportHouder.classList.contains("zonder-gemlijn");
   const aanwezig = SPORT_VOLGORDE.filter((t) =>
     dagen.some((d) => d.sport.some((s) => s.type === t)));
   document.getElementById("legende-sport").replaceChildren(
     ...aanwezig.map((t) => el("span", { class: "sleutel" },
-      el("span", { class: "vlak", style: `background:${SPORT_KLEUREN[t]}` }), t)));
+      el("span", { class: "vlak", style: `background:${SPORT_KLEUREN[t]}` }), t)),
+    el("span", {
+      class: "sleutel klikbaar" + (sportGemUit ? " uit" : ""),
+      title: "klik om de gemiddeldelijn te tonen of te verbergen",
+      onclick: (e) => {
+        sportHouder.classList.toggle("zonder-gemlijn");
+        e.currentTarget.classList.toggle("uit");
+      },
+    }, el("span", { class: "vlak", style: "background:var(--gewichtslijn)" }), "weekgemiddelde"));
 }
 
 /* ================= 5. Dagboek ================= */

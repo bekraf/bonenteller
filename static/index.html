@@ -41,9 +41,9 @@
       <span style="color:var(--gedempt);font-size:13px">Periode:</span>
       <button data-dagen="7">Laatste 7 dagen</button>
       <button data-dagen="14">Laatste 14 dagen</button>
-      <button data-dagen="30">Laatste 30 dagen</button>
+      <button data-dagen="30" class="actief">Laatste 30 dagen</button>
       <button data-dagen="90">Laatste 90 dagen</button>
-      <button data-dagen="jaar" class="actief">Van begin jaar</button>
+      <button data-dagen="jaar">Van begin jaar</button>
       <button data-dagen="0">Alles</button>
     </div>
 
@@ -64,9 +64,11 @@
 
     <div class="kaart">
       <h2>Sport per dag</h2>
-      <p class="subtitel">minuten per dag, kleur per type activiteit</p>
+      <p class="subtitel">minuten per dag, kleur per type activiteit — lijn = weekgemiddelde (vr t/m do)</p>
       <div class="legende" id="legende-sport"></div>
-      <div class="grafiek" id="grafiek-sport"></div>
+      <!-- 'zonder-gemlijn': de weekgemiddeldelijn start verborgen; klik op
+           het legende-item "weekgemiddelde" om ze te tonen. -->
+      <div class="grafiek zonder-gemlijn" id="grafiek-sport"></div>
     </div>
 
   </section>

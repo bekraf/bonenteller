@@ -138,10 +138,7 @@ main { padding: 16px 24px 48px; max-width: 1180px; margin: 0 auto; }
 }
 
 .tegel .label { color: var(--inkt-2); font-size: 13px; }
-.tegel .waarde { font-size: 28px; font-weight: 600; margin-top: 2px; }
-.tegel .delta { font-size: 13px; margin-top: 2px; color: var(--inkt-2); }
-.tegel .delta.goed { color: var(--goed); }
-.tegel .delta.slecht { color: var(--slecht); }
+.tegel .waarde { font-size: 28px; font-weight: 600; margin-top: 2px; color: #FFE4A7; }
 
 /* Filterrij */
 .filters {
