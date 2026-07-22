@@ -34,6 +34,14 @@
   --grafiek-goed: #0ca30c;
   --grafiek-onder: #fab219;
   --grafiek-boven: #d03b3b;
+  /* Calorieën-per-dag-staven volgen de vaste sporttinten (green/red/yellow),
+     niet de zachtere richtlijn-/tekstkleuren van het Instellingen-tabblad. */
+  --kcal-goed: #0ca30c;
+  --kcal-onder: #fab219;
+  --kcal-boven: #d03b3b;
+  /* Buitenste BMI-band bínnen het gezonde bereik: oranje tussenstap tussen
+     het geel en het rode onder-/overgewichtvlak (zachte band, 28% dekking). */
+  --bmi-tussen: #e5762a;
   /* NOVA-groepen (1 = onbewerkt ... 4 = ultrabewerkt) */
   --nova1: #58b85c;
   --nova2: #dfa62b;
@@ -169,9 +177,10 @@ main { padding: 16px 24px 48px; max-width: 1180px; margin: 0 auto; }
 .grafiek .doellijn { stroke: var(--gedempt); stroke-width: 1; stroke-dasharray: 4 3; }
 .grafiek .doeltekst { fill: var(--inkt-2); font-size: 11px; }
 .grafiek .kruisdraad { stroke: var(--aslijn); stroke-width: 1; }
-/* BMI-grenslijnen (onder-/overgewicht) in de gewichtsgrafiek */
-.grafiek .grenslijn { stroke: var(--slecht); stroke-width: 1; }
-.grafiek .grenstekst { fill: var(--slecht); font-size: 11px; }
+/* BMI-grenslijnen (onder-/overgewicht) in de gewichtsgrafiek: gedempt
+   goudbruin, los van --slecht. */
+.grafiek .grenslijn { stroke: #b3945f; stroke-width: 1; }
+.grafiek .grenstekst { fill: #b3945f; font-size: 11px; }
 
 .zweefinfo {
   position: absolute;

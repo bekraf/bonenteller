@@ -963,13 +963,13 @@ document.getElementById("bereikfilters").addEventListener("click", (e) => {
    midden naar buiten lopen vijf kleurbanden (heel groen -> donker oranje);
    buiten het gezonde bereik is het donkerrood. Dezelfde schaal kleurt de
    achtergrond van de gewichtsgrafiek én de tegels bovenaan. */
-// Zelfde groen/geel/rood als de kcal-grafiek (via de gedeelde
+// Zelfde groen/geel als de kcal-grafiek (via de gedeelde
 // --grafiek-*-variabelen, instelbaar op het Instellingen-tabblad), zodat het
 // hele dashboard één palet spreekt: groen rond het midden, geel verder weg,
-// rood aan de rand.
+// oranje als buitenste band binnen het gezonde bereik (vaste --bmi-tussen).
 const BMI_ONDER = 18.5, BMI_MIDDEN = 21.7, BMI_BOVEN = 24.9;
 const BMI_BANDKLEUREN = ["var(--grafiek-goed)", "var(--grafiek-goed)",
-  "var(--grafiek-onder)", "var(--grafiek-onder)", "var(--grafiek-boven)"];
+  "var(--grafiek-onder)", "var(--grafiek-onder)", "var(--bmi-tussen)"];
 const BMI_BANDBREEDTE = (BMI_MIDDEN - BMI_ONDER) / BMI_BANDKLEUREN.length; // 0,64 BMI
 const BMI_BUITEN = "var(--grafiek-boven)";   // onder-/overgewicht (vol aangezet)
 
@@ -1170,9 +1170,9 @@ async function laadDashboard() {
   // Zelfde betekenis als in de tabellen: groen binnen de richtlijn,
   // rood boven het maximum, amber onder het minimum.
   const kcalKleur = (w) => {
-    if (kcalMax != null && w > kcalMax) return "var(--grafiek-boven)";
-    if (kcalMin != null && w < kcalMin) return "var(--grafiek-onder)";
-    return "var(--grafiek-goed)";
+    if (kcalMax != null && w > kcalMax) return "var(--kcal-boven)";
+    if (kcalMin != null && w < kcalMin) return "var(--kcal-onder)";
+    return "var(--kcal-goed)";
   };
   // De subtitel meldt de correctie, anders lijkt de grafiek het dagboek
   // (dat de ruwe logwaarden toont) tegen te spreken.
@@ -1202,8 +1202,8 @@ async function laadDashboard() {
 
   // Legende bij de kcal-grafiek (kleur draagt hier betekenis).
   document.getElementById("legende-kcal").replaceChildren(
-    ...[["var(--grafiek-goed)", "binnen richtlijn"], ["var(--grafiek-onder)", "onder min"],
-        ["var(--grafiek-boven)", "boven max"]]
+    ...[["var(--kcal-goed)", "binnen richtlijn"], ["var(--kcal-onder)", "onder min"],
+        ["var(--kcal-boven)", "boven max"]]
       .map(([kleur, label]) => el("span", { class: "sleutel" },
         el("span", { class: "vlak", style: `background:${kleur}` }), label)));
 
