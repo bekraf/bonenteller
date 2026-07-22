@@ -536,6 +536,12 @@ function lijnGrafiek(houder, punten, opties = {}) {
   // van pas bij het eerste punt.
   let pad = punten.map((p, i) => `${i ? "L" : "M"}${xVan(p.datum).toFixed(1)},${yVan(p.waarde).toFixed(1)}`).join("");
   if (voorpunt) pad = `M0,${yVan(voorpunt.waarde).toFixed(1)}L` + pad.slice(1);
+  // Halo: dezelfde lijn eerst dikker en donker eronder, zodat de eigenlijke
+  // lijn een strakke donkere rand krijgt en loskomt van de BMI-zones.
+  g.append(svgEl("path", {
+    d: pad, fill: "none", stroke: "var(--gewichtslijn-rand)", "stroke-width": 4,
+    "stroke-linejoin": "round", "stroke-linecap": "round",
+  }));
   g.append(svgEl("path", {
     d: pad, fill: "none", stroke: "var(--gewichtslijn)", "stroke-width": 2,
     "stroke-linejoin": "round", "stroke-linecap": "round",

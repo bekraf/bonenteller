@@ -23,14 +23,14 @@
   --accent: #234990;        /* knoppen (desktopblauw) */
   --roest: #89380f;         /* hover-wash (desktoproest) */
   --reeks-1: #3987e5;       /* datakleur: opgelicht blauw, leesbaar op donker */
-  --goed: #58b85c;          /* groen: goed / gezakt gewicht */
-  --slecht: #e06060;        /* rood: slecht / gestegen gewicht */
+  --goed: #0ca30c;          /* groen: goed / gezakt gewicht */
+  --slecht: #d03b3b;        /* rood: slecht / gestegen gewicht */
   /* kleurcodering t.o.v. de richtlijnen */
-  --boven-max: #e06060;     /* rood: waarde boven het maximum */
-  --onder-min: #dfa62b;     /* amber: waarde onder het minimum */
-  /* dezelfde rollen in de grafieken (kcal-staven, BMI-zones): voller
-     aangezet zodat ze op vlakken en staven dragen. Eén kleurkeuze op het
-     Instellingen-tabblad overschrijft de rol- én grafiekvariant tegelijk. */
+  --boven-max: #d03b3b;     /* rood: waarde boven het maximum */
+  --onder-min: #fab219;     /* amber: waarde onder het minimum */
+  /* dezelfde rollen in de grafieken (kcal-staven, BMI-zones): zelfde tinten
+     als de tekstrollen, zodat tekst en grafiek overal gelijk kleuren. Eén
+     kleurkeuze op het Instellingen-tabblad overschrijft ze allebei. */
   --grafiek-goed: #0ca30c;
   --grafiek-onder: #fab219;
   --grafiek-boven: #d03b3b;
@@ -47,13 +47,16 @@
   --bmi-geel: #e6c058;
   --bmi-oranje: #e8863e;
   --bmi-buiten: #c23a34;
-  /* De gewichtslijn zelf (licht warm oranje i.p.v. het blauwe --reeks-1). */
-  --gewichtslijn: #f9ab57;
+  /* De gewichtslijn zelf: gedempt goudbruin, zelfde tint als de
+     grenslijnen/-tekst (i.p.v. het blauwe --reeks-1), met een donkere
+     rand (halo) eronder zodat de lijn loskomt van de kleurzones. */
+  --gewichtslijn: #b3945f;
+  --gewichtslijn-rand: rgba(0, 0, 0, 0.55);
   /* NOVA-groepen (1 = onbewerkt ... 4 = ultrabewerkt) */
-  --nova1: #58b85c;
-  --nova2: #dfa62b;
+  --nova1: #0ca30c;
+  --nova2: #fab219;
   --nova3: #e2854e;
-  --nova4: #e06060;
+  --nova4: #d03b3b;
   /* sporttypes (gestapelde staven + legende in de sportgrafiek) */
   --sport-lopen: #d03b3b;
   --sport-krachttraining: #0ca30c;
