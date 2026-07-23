@@ -43,7 +43,7 @@
       <button data-dagen="14">Laatste 14 dagen</button>
       <button data-dagen="30" class="actief">Laatste 30 dagen</button>
       <button data-dagen="90">Laatste 90 dagen</button>
-      <button data-dagen="jaar">Van begin jaar</button>
+      <button data-dagen="jaar">Start 2026</button>
       <button data-dagen="0">Alles</button>
     </div>
 
@@ -202,7 +202,7 @@
 
       <div class="kaart">
         <h2>Gewichtmetingen</h2>
-        <p class="subtitel">klik op een datum of gewicht om te bewerken — toevoegen op een bestaande datum overschrijft die meting</p>
+        <p class="subtitel">klik op een datum of gewicht om te bewerken</p>
         <form class="regel" id="form-geg-gewicht">
           <label>Datum <input type="date" id="geg-gewicht-datum" required></label>
           <label>Gewicht (kg) <input type="number" id="geg-gewicht-kg" step="0.1" min="1" required></label>
@@ -237,7 +237,7 @@
 
     <div class="kaart">
       <h2>Export</h2>
-      <p class="subtitel">alle gegevens als download — voor backup of eigen analyse</p>
+      <p class="subtitel">alle gegevens als download</p>
       <div class="knoppenrij">
         <a class="knop" href="/api/export/db">Database (gezondheid.db)</a>
         <a class="knop" href="/api/export/csv">Alle tabellen als CSV (zip)</a>
@@ -252,7 +252,6 @@
     <form id="form-instellingen">
       <div class="kaart">
         <h2>Algemeen</h2>
-        <p class="subtitel">lichaam en energie</p>
         <div id="inst-algemeen"></div>
       </div>
       <div class="kaart">
@@ -261,7 +260,6 @@
       </div>
       <div class="kaart">
         <h2>Kleuren</h2>
-        <p class="subtitel">achtergrond, knoppen, richtlijngrenzen, NOVA-groepen en sporttypes</p>
         <div id="inst-kleuren"></div>
         <button class="klein" type="button" id="inst-kleuren-standaard" style="margin-top:10px">Standaardkleuren terugzetten</button>
       </div>
@@ -276,7 +274,6 @@
   <section id="paneel-voedingsmiddelen" class="paneel">
     <div class="kaart">
       <h2 id="cat-titel">Nieuw voedingsmiddel</h2>
-      <p class="subtitel">waarden per stuk of per 100 g — kcal, vet, koolhydraten, eiwit, zout, vezels</p>
       <form class="regel" id="form-catalogus">
         <input type="hidden" id="cat-id">
         <label>Naam <input id="cat-naam" style="width:200px" required></label>

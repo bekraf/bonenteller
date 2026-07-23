@@ -1237,8 +1237,8 @@ async function laadDashboard() {
     : periodeStart ? Math.round((naarDatum(einde) - naarDatum(periodeStart)) / DAG_MS) + 1 : 1;
   const minPerWeek = sportMin / periodeDagen * 7;
   tegels.append(el("div", { class: "tegel" },
-    el("div", { class: "label" }, "Gem. Sport"),
-    el("div", { class: "waarde" }, `${fmt0.format(minPerWeek)} m/w`)));
+    el("div", { class: "label" }, "Gem. Sport Per Week"),
+    el("div", { class: "waarde" }, `${fmt0.format(minPerWeek)} min`)));
 
   // Tegel: totaal gelopen kilometers binnen de gekozen periode:
   // afstand = snelheid × duur.
@@ -1291,7 +1291,7 @@ async function laadDashboard() {
 
     // Alleen bij 'Alles' zoomen we uit tot de volledige gezonde BMI-schaal,
     // met de grenslijnen naar onder- en overgewicht in beeld. Bij alle andere
-    // periodes ('Van begin jaar' incluis) blijft de grafiek strak inzoomen
+    // periodes ('Start 2026' incluis) blijft de grafiek strak inzoomen
     // op de metingen zelf.
     if (filterDagen === 0) {
       vastBereik = { min: kg(BMI_ONDER) - 2, max: kg(BMI_BOVEN) + 2 };
