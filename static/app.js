@@ -1302,9 +1302,6 @@ async function laadDashboard() {
     }
   }
 
-  document.getElementById("gewicht-subtitel").textContent =
-    (doel ? `kg per meting, doellijn op ${fmt.format(doel)} kg` : "kg per meting") +
-    " — achtergrond = BMI-zones (groen in het midden, donkerrood buiten 18,5–24,9)";
   // Laatste meting vóór de periode: daarmee trekt de grafiek de lijn door
   // tot de y-as in plaats van pas bij de eerste meting binnen beeld.
   const vorigeMeting = gewichten.filter((g) => g.datum < van).at(-1);
@@ -1325,14 +1322,6 @@ async function laadDashboard() {
     if (kcalMin != null && w < kcalMin) return "var(--kcal-onder)";
     return "var(--kcal-goed)";
   };
-  // De subtitel meldt de correctie, anders lijkt de grafiek het dagboek
-  // (dat de ruwe logwaarden toont) tegen te spreken.
-  const onderrapportagePct = instellingen.onderrapportage_pct || 0;
-  document.getElementById("kcal-subtitel").textContent =
-    (onderrapportagePct
-      ? `kcal per dag incl. ${fmt.format(onderrapportagePct)}% onderrapportage`
-      : "kcal gegeten per dag") + ", gekleurd t.o.v. de richtlijn — lijn = weekgemiddelde (vr t/m do)";
-
   // Weekgemiddelde bovenop de staven: weken lopen van vrijdag t/m donderdag
   // (weegdag tot weegdag, zoals het weekoverzicht), zodat de lijn hetzelfde
   // ritme volgt als de wegingen. Alleen eetdagen (kcal > 0) tellen mee, net
@@ -1541,25 +1530,47 @@ async function laadDag() {
     // onbewerkt) t/m rood (4, ultrabewerkt); vrije invoer blijft neutraal.
     // Klikken op het uur of de hoeveelheid zet de rij in bewerkmodus:
     // beide worden invoervelden en het × wordt een ✓ om op te slaan
-    // (Enter slaat ook op, Esc annuleert).
+    // (Enter slaat ook op, Esc annuleert). Vrije invoer (geen koppeling
+    // met de catalogus) is helemaal bewerkbaar: ook alle voedingswaarden
+    // worden invoervelden, en de naam klapt uit met een NOVA-keuze
+    // (nova 1 t/m 4) — catalogusitems bewerk je hun waarden en NOVA
+    // immers via de voedingsmiddelenpagina.
     const rijen = dag.regels.map((r) => {
+      const vrij = r.voedingsmiddel_id == null;
       const uurCel = el("td", { class: "gedempt klik-bewerk", title: "Klik om te bewerken" },
         r.uur == null ? "–" : `${r.uur}u`);
+      const naamCel = el("td", {
+        class: (r.nova ? `nova${r.nova}` : "") + (vrij ? " klik-bewerk" : ""),
+        title: vrij ? "Klik om te bewerken (NOVA-groep)" : "",
+      }, r.naam);
       const hoevCel = el("td", { class: "getal gedempt klik-bewerk", title: "Klik om te bewerken" },
         r.eenheid === "stuks" ? `${fmt.format(r.hoeveelheid)}×` : `${fmt.format(r.hoeveelheid)} g`);
+      const waardeCellen = {};   // nutriëntnaam -> cel
+      for (const k of NUTRIENTEN) {
+        waardeCellen[k] = el("td", {
+          class: "getal" + (vrij ? " klik-bewerk" : ""),
+          title: vrij ? "Klik om te bewerken" : "",
+        }, fmt.format(r[k] || 0));
+      }
       const knop = el("button", { class: "klein", title: "Verwijder" }, "×");
       // ⧉ dupliceert de regel (zelfde dag, uur en waarden) — voor "nog zo eentje".
       const dupKnop = el("button", { class: "klein kopieer", title: "Dupliceer" }, "⧉");
-      let veldUur = null, veldHoev = null;   // bestaan zodra de rij bewerkt wordt
+      let veldUur = null, veldHoev = null, veldNova = null;
+      const veldWaarden = {};   // bestaan zodra de rij bewerkt wordt
 
       async function opslaan() {
         try {
-          await put(`/api/voedingslog/${r.id}`, { hoeveelheid: veldHoev.value, uur: veldUur.value });
+          const gegevens = { hoeveelheid: veldHoev.value, uur: veldUur.value };
+          if (vrij) {
+            gegevens.nova = veldNova.value;
+            for (const k of NUTRIENTEN) gegevens[k] = veldWaarden[k].value;
+          }
+          await put(`/api/voedingslog/${r.id}`, gegevens);
           laadDag();   // herladen ververst ook het dagtotaal
         } catch (fout) { toonMelding("melding-voeding", fout.message); }
       }
 
-      function startBewerken(focusUur) {
+      function startBewerken(focusVeld) {
         if (!veldUur) {
           veldUur = el("input", {
             type: "number", min: 0, max: 24, value: r.uur ?? "", style: "width:56px",
@@ -1567,7 +1578,24 @@ async function laadDag() {
           veldHoev = el("input", {
             type: "number", step: 1, min: 1, value: r.hoeveelheid, style: "width:80px",
           });
-          for (const veld of [veldUur, veldHoev]) {
+          const velden = [veldUur, veldHoev];
+          if (vrij) {
+            // De naam klapt uit naar "naam + NOVA-keuze".
+            veldNova = el("select", {},
+              el("option", { value: "" }, "nova ?"),
+              ...[1, 2, 3, 4].map((g) => el("option", { value: g }, `nova ${g}`)));
+            veldNova.value = r.nova || "";
+            naamCel.replaceChildren(r.naam + " ", veldNova);
+            for (const k of NUTRIENTEN) {
+              veldWaarden[k] = el("input", {
+                type: "number", step: "any", min: 0, value: r[k] || 0, style: "width:64px",
+              });
+              waardeCellen[k].replaceChildren(veldWaarden[k]);
+              velden.push(veldWaarden[k]);
+            }
+            velden.push(veldNova);
+          }
+          for (const veld of velden) {
             veld.addEventListener("keydown", (e) => {
               if (e.key === "Enter") opslaan();
               if (e.key === "Escape") laadDag();   // annuleren = vers herladen
@@ -1578,11 +1606,19 @@ async function laadDag() {
           knop.textContent = "✓";
           knop.title = "Opslaan";
         }
-        (focusUur ? veldUur : veldHoev).focus();
+        focusVeld().focus();
       }
 
-      uurCel.addEventListener("click", () => startBewerken(true));
-      hoevCel.addEventListener("click", () => startBewerken(false));
+      uurCel.addEventListener("click", () => startBewerken(() => veldUur));
+      hoevCel.addEventListener("click", () => startBewerken(() => veldHoev));
+      if (vrij) {
+        naamCel.addEventListener("click", (e) => {
+          if (e.target !== veldNova) startBewerken(() => veldNova);
+        });
+        for (const k of NUTRIENTEN) {
+          waardeCellen[k].addEventListener("click", () => startBewerken(() => veldWaarden[k]));
+        }
+      }
       knop.addEventListener("click", async () => {
         if (veldUur) { opslaan(); return; }
         try {
@@ -1599,9 +1635,9 @@ async function laadDag() {
 
       return el("tr", {},
         uurCel,
-        el("td", { class: r.nova ? `nova${r.nova}` : "" }, r.naam),
+        naamCel,
         hoevCel,
-        ...NUTRIENTEN.map((k) => el("td", { class: "getal" }, fmt.format(r[k] || 0))),
+        ...NUTRIENTEN.map((k) => waardeCellen[k]),
         el("td", { class: "acties" }, dupKnop, knop));
     });
 
@@ -1729,6 +1765,7 @@ document.getElementById("form-vrij").addEventListener("submit", async (e) => {
       naam: document.getElementById("vrij-naam").value,
       hoeveelheid: document.getElementById("vrij-hoeveelheid").value,
       eenheid: document.getElementById("vrij-eenheid").value,
+      nova: document.getElementById("vrij-nova").value,
       uur: document.getElementById("vrij-uur").value,
     };
     for (const k of NUTRIENTEN) gegevens[k] = document.getElementById("vrij-" + k).value;

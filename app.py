@@ -381,18 +381,18 @@ def api_dagen(con, query):
         d["nova_kcal"] = {}
         dagen[r["datum"]] = d
 
-    # ...dan per dag de kcal opgeteld per NOVA-groep. De groep komt uit de
-    # catalogus: eerst via de koppeling (voedingsmiddel_id), anders via de
-    # naam — zo tellen ook regels mee die hun koppeling kwijt zijn (bv. na
-    # het verwijderen en opnieuw toevoegen van een catalogusitem). Vrije
-    # invoer zonder catalogusnaam telt als 'onbekend'...
+    # ...dan per dag de kcal opgeteld per NOVA-groep. Eerst de eigen groep
+    # van de logregel (vrije invoer), anders uit de catalogus: via de
+    # koppeling (voedingsmiddel_id), of via de naam — zo tellen ook regels
+    # mee die hun koppeling kwijt zijn (bv. na het verwijderen en opnieuw
+    # toevoegen van een catalogusitem). De rest telt als 'onbekend'...
     for r in con.execute(
-            "SELECT l.datum, COALESCE(vm.nova, vmn.nova) nova, SUM(l.kcal) kcal "
+            "SELECT l.datum, COALESCE(l.nova, vm.nova, vmn.nova) nova, SUM(l.kcal) kcal "
             "FROM voedingslog l "
             "LEFT JOIN voedingsmiddelen vm ON vm.id = l.voedingsmiddel_id "
             "LEFT JOIN voedingsmiddelen vmn ON vmn.naam = l.naam "
             "WHERE l.datum BETWEEN ? AND ? "
-            "GROUP BY l.datum, COALESCE(vm.nova, vmn.nova)", (van, tot)):
+            "GROUP BY l.datum, COALESCE(l.nova, vm.nova, vmn.nova)", (van, tot)):
         dag = dagen.get(r["datum"])
         if dag is not None:
             sleutel = str(r["nova"]) if r["nova"] else "onbekend"
@@ -413,15 +413,24 @@ def api_dagen(con, query):
 
 def api_dag(con, datum):
     """Alles van één dag, voor het dagboek: elke gegeten portie (gesorteerd
-    op uur, met de NOVA-groep uit de catalogus — via de koppeling of anders
-    via de naam, net als in api_dagen), de sport en het dagtotaal."""
+    op uur, met de NOVA-groep van de regel zelf of anders uit de catalogus —
+    via de koppeling of via de naam, net als in api_dagen), de sport en het
+    dagtotaal."""
     eis_datum(datum)
-    regels = [dict(r) for r in con.execute(
-        "SELECT l.*, COALESCE(vm.nova, vmn.nova) nova FROM voedingslog l "
-        "LEFT JOIN voedingsmiddelen vm ON vm.id = l.voedingsmiddel_id "
-        "LEFT JOIN voedingsmiddelen vmn ON vmn.naam = l.naam "
-        "WHERE l.datum = ? "
-        "ORDER BY l.uur IS NULL, l.uur, l.id", (datum,))]   # zonder uur achteraan
+    # De catalogusgroep krijgt een eigen alias: 'SELECT l.*' bevat zelf al
+    # een nova-kolom en dict() zou anders de verkeerde van de twee kiezen.
+    regels = []
+    for r in con.execute(
+            "SELECT l.*, COALESCE(vm.nova, vmn.nova) nova_catalogus "
+            "FROM voedingslog l "
+            "LEFT JOIN voedingsmiddelen vm ON vm.id = l.voedingsmiddel_id "
+            "LEFT JOIN voedingsmiddelen vmn ON vmn.naam = l.naam "
+            "WHERE l.datum = ? "
+            "ORDER BY l.uur IS NULL, l.uur, l.id", (datum,)):   # zonder uur achteraan
+        regel = dict(r)
+        nova_catalogus = regel.pop("nova_catalogus")
+        regel["nova"] = regel["nova"] or nova_catalogus
+        regels.append(regel)
     sport = [dict(r) for r in con.execute(
         "SELECT * FROM sportactiviteiten WHERE datum = ? ORDER BY id", (datum,))]
     totaal = {k: round(sum(r[k] or 0 for r in regels), 1) for k in VOEDING_KOLOMMEN}
@@ -495,8 +504,9 @@ def api_voedingslog_nieuw(con, gegevens):
         naam = vm["naam"]
         waarden = [round(vm[k] * factor, 1) for k in VOEDING_KOLOMMEN]
         vm_id = vm["id"]
+        nova = None   # de NOVA-groep komt uit de catalogus
     else:
-        # Smaak 2: vrije invoer met eigen waarden.
+        # Smaak 2: vrije invoer met eigen waarden (en eventueel NOVA-groep).
         naam = (gegevens.get("naam") or "").strip().lower()
         if not naam:
             raise FoutInvoer("naam of voedingsmiddel_id is verplicht")
@@ -505,12 +515,13 @@ def api_voedingslog_nieuw(con, gegevens):
             raise FoutInvoer("eenheid moet 'gram' of 'stuks' zijn")
         waarden = [eis_getal(gegevens.get(k, 0), k, 0) for k in VOEDING_KOLOMMEN]
         vm_id = None
+        nova = eis_nova(gegevens)
 
     cur = con.execute(
-        "INSERT INTO voedingslog (datum, uur, voedingsmiddel_id, naam, "
+        "INSERT INTO voedingslog (datum, uur, voedingsmiddel_id, naam, nova, "
         "hoeveelheid, eenheid, kcal, vet, koolhydraten, eiwit, zout, vezels) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (datum, uur, vm_id, naam, hoeveelheid, eenheid, *waarden))
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (datum, uur, vm_id, naam, nova, hoeveelheid, eenheid, *waarden))
     con.commit()
     return {"ok": True, "id": cur.lastrowid}
 
@@ -523,9 +534,9 @@ def api_voedingslog_dupliceer(con, log_id):
     if rij is None:
         raise FoutInvoer("logregel niet gevonden")
     cur = con.execute(
-        "INSERT INTO voedingslog (datum, uur, voedingsmiddel_id, naam, "
+        "INSERT INTO voedingslog (datum, uur, voedingsmiddel_id, naam, nova, "
         "hoeveelheid, eenheid, kcal, vet, koolhydraten, eiwit, zout, vezels) "
-        "SELECT datum, uur, voedingsmiddel_id, naam, hoeveelheid, eenheid, "
+        "SELECT datum, uur, voedingsmiddel_id, naam, nova, hoeveelheid, eenheid, "
         "kcal, vet, koolhydraten, eiwit, zout, vezels "
         "FROM voedingslog WHERE id = ?", (log_id,))
     con.commit()
@@ -542,9 +553,9 @@ def api_voedingslog_kopieer(con, gegevens):
     if van == naar:
         raise FoutInvoer("van en naar zijn dezelfde dag")
     cur = con.execute(
-        "INSERT INTO voedingslog (datum, uur, voedingsmiddel_id, naam, "
+        "INSERT INTO voedingslog (datum, uur, voedingsmiddel_id, naam, nova, "
         "hoeveelheid, eenheid, kcal, vet, koolhydraten, eiwit, zout, vezels) "
-        "SELECT ?, uur, voedingsmiddel_id, naam, hoeveelheid, eenheid, "
+        "SELECT ?, uur, voedingsmiddel_id, naam, nova, hoeveelheid, eenheid, "
         "kcal, vet, koolhydraten, eiwit, zout, vezels "
         "FROM voedingslog WHERE datum = ?", (naar, van))
     con.commit()
@@ -555,7 +566,11 @@ def api_voedingslog_bewerk(con, log_id, gegevens):
     """Hoeveelheid en/of uur van een gelogde portie aanpassen (tikfout
     verbeteren). Bij een nieuwe hoeveelheid schalen de bewaarde
     voedingswaarden evenredig mee: de regel behoudt zo zijn eigen
-    waarden-per-eenheid van toen, ook als de catalogus intussen wijzigde."""
+    waarden-per-eenheid van toen, ook als de catalogus intussen wijzigde.
+
+    Vrije invoer (geen koppeling met de catalogus) mag daarbovenop al zijn
+    voedingswaarden en zijn NOVA-groep rechtstreeks meesturen — die heeft
+    geen catalogusitem om ze in bij te werken."""
     rij = con.execute("SELECT * FROM voedingslog WHERE id = ?", (log_id,)).fetchone()
     if rij is None:
         raise FoutInvoer("logregel niet gevonden")
@@ -569,13 +584,26 @@ def api_voedingslog_bewerk(con, log_id, gegevens):
         uur = None
 
     hoeveelheid = eis_getal(gegevens.get("hoeveelheid"), "hoeveelheid", 0.01)
-    factor = hoeveelheid / rij["hoeveelheid"] if rij["hoeveelheid"] else 1
-    waarden = [round((rij[k] or 0) * factor, 1) for k in VOEDING_KOLOMMEN]
 
-    con.execute(
-        "UPDATE voedingslog SET uur=?, hoeveelheid=?, kcal=?, vet=?, "
-        "koolhydraten=?, eiwit=?, zout=?, vezels=? WHERE id=?",
-        (uur, hoeveelheid, *waarden, log_id))
+    eigen = rij["voedingsmiddel_id"] is None and (
+        "nova" in gegevens or any(k in gegevens for k in VOEDING_KOLOMMEN))
+    if eigen:
+        # Vrije invoer met meegestuurde waarden: rechtstreeks overnemen,
+        # niet schalen — de gebruiker typt de bedoelde eindwaarden.
+        waarden = [eis_getal(gegevens.get(k, rij[k] or 0), k, 0)
+                   for k in VOEDING_KOLOMMEN]
+        nova = eis_nova(gegevens) if "nova" in gegevens else rij["nova"]
+        con.execute(
+            "UPDATE voedingslog SET uur=?, hoeveelheid=?, nova=?, kcal=?, vet=?, "
+            "koolhydraten=?, eiwit=?, zout=?, vezels=? WHERE id=?",
+            (uur, hoeveelheid, nova, *waarden, log_id))
+    else:
+        factor = hoeveelheid / rij["hoeveelheid"] if rij["hoeveelheid"] else 1
+        waarden = [round((rij[k] or 0) * factor, 1) for k in VOEDING_KOLOMMEN]
+        con.execute(
+            "UPDATE voedingslog SET uur=?, hoeveelheid=?, kcal=?, vet=?, "
+            "koolhydraten=?, eiwit=?, zout=?, vezels=? WHERE id=?",
+            (uur, hoeveelheid, *waarden, log_id))
     con.commit()
     return {"ok": True}
 
@@ -690,10 +718,10 @@ def api_herstel(con, soort, gegevens):
                              (vm_id,)).fetchone() is None:
         vm_id = None   # het item is intussen uit de catalogus verdwenen
     cur = con.execute(
-        "INSERT INTO voedingslog (datum, uur, voedingsmiddel_id, naam, "
+        "INSERT INTO voedingslog (datum, uur, voedingsmiddel_id, naam, nova, "
         "hoeveelheid, eenheid, kcal, vet, koolhydraten, eiwit, zout, vezels) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (datum, uur, vm_id, naam, hoeveelheid, eenheid, *waarden))
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (datum, uur, vm_id, naam, eis_nova(gegevens), hoeveelheid, eenheid, *waarden))
     con.commit()
     return {"ok": True, "id": cur.lastrowid}
 
@@ -934,6 +962,10 @@ def main():
     con = db()
     con.execute("CREATE TABLE IF NOT EXISTS dagnotities ("
                 "datum TEXT PRIMARY KEY, tekst TEXT NOT NULL)")
+    # Vrije invoer kan sinds juli 2026 zijn eigen NOVA-groep meekrijgen;
+    # oudere databases missen de kolom nog.
+    if "nova" not in [r[1] for r in con.execute("PRAGMA table_info(voedingslog)")]:
+        con.execute("ALTER TABLE voedingslog ADD COLUMN nova INTEGER")
     con.commit()
     con.close()
     poort = int(sys.argv[1]) if len(sys.argv) > 1 else 8000

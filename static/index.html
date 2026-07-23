@@ -49,13 +49,11 @@
 
     <div class="kaart">
       <h2>Gewicht</h2>
-      <p class="subtitel" id="gewicht-subtitel">kg per meting, met doellijn — achtergrond = BMI-zones (groen in het midden, rood buiten 18,5–24,9)</p>
       <div class="grafiek" id="grafiek-gewicht"></div>
     </div>
 
     <div class="kaart">
       <h2>Calorieën per dag</h2>
-      <p class="subtitel" id="kcal-subtitel">kcal gegeten per dag, gekleurd t.o.v. de richtlijn</p>
       <div class="legende" id="legende-kcal"></div>
       <!-- 'zonder-gemlijn': de weekgemiddeldelijn start verborgen; klik op
            het legende-item "weekgemiddelde" om ze te tonen. -->
@@ -64,7 +62,6 @@
 
     <div class="kaart">
       <h2>Sport per dag</h2>
-      <p class="subtitel">minuten per dag, kleur per type activiteit — lijn = weekgemiddelde (vr t/m do)</p>
       <div class="legende" id="legende-sport"></div>
       <!-- 'zonder-gemlijn': de weekgemiddeldelijn start verborgen; klik op
            het legende-item "weekgemiddelde" om ze te tonen. -->
@@ -107,12 +104,21 @@
       </form>
 
       <details style="margin-top:10px">
-        <summary style="font-size:13px;color:var(--inkt-2);cursor:pointer">Vrije invoer (niet in catalogus)</summary>
+        <summary style="font-size:13px;color:var(--inkt-2);cursor:pointer">Vrije invoer</summary>
         <form class="regel" id="form-vrij">
           <label>Naam <input id="vrij-naam" style="width:180px"></label>
           <label>Hoeveelheid <input type="number" id="vrij-hoeveelheid" step="1" min="1" value="1"></label>
           <label>Eenheid
             <select id="vrij-eenheid"><option value="stuks">stuks</option><option value="gram">gram</option></select>
+          </label>
+          <label>NOVA-groep
+            <select id="vrij-nova">
+              <option value="">onbekend</option>
+              <option value="1">1 – onbewerkt of minimaal bewerkt</option>
+              <option value="2">2 – bewerkt culinair ingrediënt</option>
+              <option value="3">3 – bewerkt</option>
+              <option value="4">4 – ultrabewerkt</option>
+            </select>
           </label>
           <label>kcal <input type="number" id="vrij-kcal" step="any" min="0" value="0"></label>
           <label>Vet <input type="number" id="vrij-vet" step="any" min="0" value="0"></label>
@@ -160,7 +166,6 @@
 
     <div class="kaart">
       <h2>Notitie</h2>
-      <p class="subtitel">vrije tekst bij deze dag — slaap, gevoel, context, ...</p>
       <form id="form-notitie">
         <textarea id="dag-notitie" rows="2" placeholder="Nog geen notitie voor deze dag."></textarea>
         <div class="notitie-onder">
