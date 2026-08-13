@@ -196,6 +196,18 @@ main { padding: 16px 24px 48px; max-width: 1180px; margin: 0 auto; }
 /* 9px i.p.v. 11px: "max 2.600" moet in de rechtermarge (±50px) passen. */
 .grafiek .doeltekst { fill: var(--inkt-2); font-size: 9px; }
 .grafiek .kruisdraad { stroke: var(--aslijn); stroke-width: 1; }
+/* Gekoppelde grafieken: de dag die in een ándere grafiek wordt aangewezen.
+   In de gewichtsgrafiek een gestreepte verticale lijn — gestreept, zodat je
+   ze niet verwart met de eigen kruisdraad van deze grafiek, en crème zodat
+   ze leesbaar blijft over de BMI-zones. In de staafgrafieken een zachte
+   kolom achter de staaf van die dag, zodat ook een lege dag te zien is. */
+.grafiek .koppellijn {
+  stroke: var(--inkt-2);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.75;
+}
+.grafiek .koppelband { fill: var(--inkt); opacity: 0.12; }
 /* BMI-grenslijnen (onder-/overgewicht) in de gewichtsgrafiek: gedempt
    goudbruin, los van --slecht. */
 .grafiek .grenslijn { stroke: #b3945f; stroke-width: 1; }

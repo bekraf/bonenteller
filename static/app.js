@@ -380,6 +380,29 @@ document.addEventListener("click", (e) => {
   }
 });
 
+/* Gekoppelde grafieken (zoals in Grafana): wijs je een dag aan in één
+   grafiek, dan lichten de andere grafieken diezelfde dag mee op — de staaf van
+   die dag kleurt bij en de gewichtsgrafiek zet er een verticale lijn. Zo lees
+   je kcal, sport en gewicht van dezelfde dag in één oogopslag, zonder heen en
+   weer te moeten kijken. Er hoort géén tweede zweefvenster bij: dat blijft van
+   de grafiek waar de aanwijzer staat.
+   Elke grafiek meldt zich bij het tekenen aan met een markeerfunctie
+   (datum, of null om de markering weg te halen). De sleutel is de houder-div,
+   dus opnieuw tekenen vervangt vanzelf de melding van de vorige tekening. */
+const koppelGrafieken = new Map();   // houder -> markeer(datum|null)
+
+function koppelGrafiek(houder, markeer) {
+  koppelGrafieken.set(houder, markeer);
+}
+
+// Meld welke dag er aangewezen wordt. De bron slaan we over: die licht zijn
+// eigen staaf/punt al op via de gewone hover.
+function meldAanwijsdag(datum, bron) {
+  for (const [houder, markeer] of koppelGrafieken) {
+    if (houder !== bron) markeer(datum);
+  }
+}
+
 // Kies een "nette" stapgrootte voor de y-as (1, 2, 2.5, 5, 10, 20, 500, ...)
 // zodat de aslabels ronde getallen zijn.
 function nietteStappen(maxW, aantal = 5) {
@@ -420,6 +443,9 @@ function nietteStappen(maxW, aantal = 5) {
                   binnen beeld begint */
 function lijnGrafiek(houder, punten, opties = {}) {
   houder.replaceChildren();
+  // De oude tekening is weg: ook haar melding aan de andere grafieken
+  // vervalt (bij lege gegevens komt er verderop geen nieuwe registratie).
+  koppelGrafieken.delete(houder);
   // Een vastgeklikt punt uit de vorige tekening van deze grafiek hoort bij de
   // net vervangen SVG: loslaten, anders blijft het venster op een spookpunt staan.
   if (zweefVast && zweefVast.houder === houder) {
@@ -591,7 +617,14 @@ function lijnGrafiek(houder, punten, opties = {}) {
   const punt = svgEl("circle", {
     r: 5, fill: "var(--gewichtslijn)", stroke: "var(--oppervlak)", "stroke-width": 2, visibility: "hidden",
   });
-  g.append(kruis, punt);
+  // Tweede, eigen kruisdraad voor de dag die in een ándere grafiek wordt
+  // aangewezen. Bewust los van 'kruis': die springt naar het dichtstbijzijnde
+  // meetpunt, terwijl deze precies op de aangewezen kalenderdag staat — ook
+  // als er die dag niet gewogen is (de lijn valt dan tussen twee metingen).
+  const koppelkruis = svgEl("line", {
+    y1: 0, y2: bh, class: "kruisdraad koppellijn", visibility: "hidden", "pointer-events": "none",
+  });
+  g.append(kruis, punt, koppelkruis);
   const vlak = svgEl("rect", { x: 0, y: 0, width: bw, height: bh, fill: "transparent" });
   g.append(vlak);
 
@@ -675,6 +708,11 @@ function lijnGrafiek(houder, punten, opties = {}) {
       regels.push([strook, "zw-foto"]);
     }
     toonZweefinfo(x, y, regels);
+    // De kcal- en sportgrafiek dezelfde dag laten oplichten. We melden de
+    // datum van het meetpunt waarop de kruisdraad is blijven hangen, niet de
+    // ruwe muispositie: het zweefvenster gaat over die dag, dus de andere
+    // grafieken horen dezelfde dag te tonen.
+    meldAanwijsdag(p.datum, houder);
   };
 
   // Vastklikken (vooral voor de telefoon, waar hover onhandig is): een klik
@@ -692,6 +730,7 @@ function lijnGrafiek(houder, punten, opties = {}) {
     vastPunt = null;
     kruis.setAttribute("visibility", "hidden");
     punt.setAttribute("visibility", "hidden");
+    meldAanwijsdag(null, houder);
     if (zweefVast && zweefVast.houder === houder) zweefVast = null;
   };
 
@@ -720,6 +759,25 @@ function lijnGrafiek(houder, punten, opties = {}) {
     kruis.setAttribute("visibility", "hidden");
     punt.setAttribute("visibility", "hidden");
     verbergZweefinfo();
+    meldAanwijsdag(null, houder);
+  });
+
+  // Andersom: een dag die in de kcal- of sportgrafiek wordt aangewezen,
+  // krijgt hier een verticale lijn op precies die kalenderdag. Dagen buiten
+  // het getekende bereik (kan niet bij een gedeelde x-as, maar goedkoop om
+  // af te vangen) laten de lijn gewoon verdwijnen.
+  let koppeldag = null;
+  koppelGrafiek(houder, (datum) => {
+    if (datum === koppeldag) return;
+    koppeldag = datum;
+    const x = datum ? xVan(datum) : null;
+    if (x == null || Number.isNaN(x) || x < 0 || x > bw) {
+      koppelkruis.setAttribute("visibility", "hidden");
+      return;
+    }
+    koppelkruis.setAttribute("x1", x);
+    koppelkruis.setAttribute("x2", x);
+    koppelkruis.setAttribute("visibility", "visible");
   });
 
   houder.append(svg);
@@ -747,6 +805,9 @@ function lijnGrafiek(houder, punten, opties = {}) {
                           tik op dezelfde staaf de klikactie uit */
 function staafGrafiek(houder, punten, opties = {}) {
   houder.replaceChildren();
+  // De oude tekening is weg: ook haar melding aan de andere grafieken
+  // vervalt (bij lege gegevens komt er verderop geen nieuwe registratie).
+  koppelGrafieken.delete(houder);
   // Net als bij de lijngrafiek: een vastgeklikte staaf uit de vorige tekening
   // hoort bij de net vervangen SVG en moet losgelaten worden.
   if (zweefVast && zweefVast.houder === houder) {
@@ -810,6 +871,25 @@ function staafGrafiek(houder, punten, opties = {}) {
     }, datumKort(punten[idx].datum)));
   }
 
+  // Zachte kolom achter de dag die in een ándere grafiek wordt aangewezen.
+  // Hier vóór de staven getekend, zodat de wash eronder blijft en de staaf
+  // zelf scherp gekleurd blijft. Ook een dag zonder staaf (weggeklikte
+  // categorie of geen gegevens) krijgt zo een zichtbare markering.
+  // Niet de volle dagband: bij een korte periode (7 dagen) is die tientallen
+  // pixels breed en wordt de wash een groot blok. Net iets breder dan de staaf
+  // is genoeg om de dag aan te wijzen.
+  const koppelbreedte = Math.min(band, dikte + 10);
+  const koppelband = svgEl("rect", {
+    y: 0, height: bh, width: koppelbreedte, class: "koppelband",
+    visibility: "hidden", "pointer-events": "none",
+  });
+  g.append(koppelband);
+
+  // datum -> bandnummer (álle dagen) en datum -> staaf (alleen de getekende);
+  // nodig om een dag uit een andere grafiek hier terug te vinden.
+  const bandVan = new Map(punten.map((p, i) => [p.datum, i]));
+  const staafVan = new Map();
+
   punten.forEach((p, i) => {
     // Weggeklikte categorie: geen staaf en ook geen aanwijsvlak — de band
     // blijft leeg, maar behoudt zijn breedte zodat de x-as niet verschuift.
@@ -839,6 +919,7 @@ function staafGrafiek(houder, punten, opties = {}) {
     // want 'opacity' is van het oplichten bij hover.
     if (p.deels) staaf.setAttribute("fill-opacity", "0.45");
     g.append(staaf);
+    staafVan.set(p.datum, staaf);
 
     // Onzichtbaar aanwijsvlak over de volledige band(hoogte): veel makkelijker
     // te raken dan een dun staafje. Bij hover licht de staaf op en verschijnt
@@ -861,10 +942,12 @@ function staafGrafiek(houder, punten, opties = {}) {
         rect.left + ((m.l + i * band + band / 2) / B) * rect.width,
         rect.top + ((m.t + y) / H) * rect.height,
         regels());
+      meldAanwijsdag(p.datum, houder);
     };
     const laatLos = () => {
       staaf.removeAttribute("opacity");
       vastPunt = null;
+      meldAanwijsdag(null, houder);
       if (zweefVast && zweefVast.houder === houder) zweefVast = null;
     };
     if (opties.bijKlik) hit.setAttribute("cursor", "pointer");
@@ -895,13 +978,36 @@ function staafGrafiek(houder, punten, opties = {}) {
       if (vastPunt === p) { toonVast(); return; }
       staaf.setAttribute("opacity", "0.75");
       toonZweefinfo(e.clientX, e.clientY, regels());
+      meldAanwijsdag(p.datum, houder);
     });
     hit.addEventListener("pointerleave", () => {
       if (vastPunt === p) { toonVast(); return; }
       staaf.removeAttribute("opacity");
       verbergZweefinfo();
+      meldAanwijsdag(null, houder);
     });
     g.append(hit);
+  });
+
+  // Markering die uit een ándere grafiek komt: dezelfde dag licht op zoals bij
+  // hover (opgelichte staaf), met de zachte kolom erachter zodat ook een lege
+  // dag te zien is. Een vastgeklikte staaf laten we met rust: die is al
+  // opgelicht en hoort dat te blijven.
+  let koppeldag = null;
+  koppelGrafiek(houder, (datum) => {
+    if (datum === koppeldag) return;
+    const oud = koppeldag != null && staafVan.get(koppeldag);
+    if (oud && !(vastPunt && vastPunt.datum === koppeldag)) oud.removeAttribute("opacity");
+    koppeldag = datum;
+    const i = datum != null ? bandVan.get(datum) : undefined;
+    if (i === undefined) {
+      koppelband.setAttribute("visibility", "hidden");
+      return;
+    }
+    const staaf = staafVan.get(datum);
+    if (staaf) staaf.setAttribute("opacity", "0.75");
+    koppelband.setAttribute("x", i * band + (band - koppelbreedte) / 2);
+    koppelband.setAttribute("visibility", "visible");
   });
 
   // Richtlijnen (bv. min 1.800 en max 2.600 kcal) als gestippelde lijnen.
@@ -991,6 +1097,9 @@ const SPORT_PLAFOND = 60;
 
 function sportGrafiek(houder, dagen, opties = {}) {
   houder.replaceChildren();
+  // De oude tekening is weg: ook haar melding aan de andere grafieken
+  // vervalt (bij lege gegevens komt er verderop geen nieuwe registratie).
+  koppelGrafieken.delete(houder);
   // Een vastgeklikte staaf uit de vorige tekening hoort bij de net vervangen
   // SVG en moet losgelaten worden (zelfde opruiming als bij de staafgrafiek).
   if (zweefVast && zweefVast.houder === houder) {
@@ -1062,6 +1171,21 @@ function sportGrafiek(houder, dagen, opties = {}) {
     }, datumKort(punten[idx].datum)));
   }
 
+  // Zachte kolom achter de dag die in een ándere grafiek wordt aangewezen
+  // (zelfde markering als in de kcal-grafiek), en de kaarten om die dag hier
+  // terug te vinden.
+  // Niet de volle dagband: bij een korte periode (7 dagen) is die tientallen
+  // pixels breed en wordt de wash een groot blok. Net iets breder dan de staaf
+  // is genoeg om de dag aan te wijzen.
+  const koppelbreedte = Math.min(band, dikte + 10);
+  const koppelband = svgEl("rect", {
+    y: 0, height: bh, width: koppelbreedte, class: "koppelband",
+    visibility: "hidden", "pointer-events": "none",
+  });
+  g.append(koppelband);
+  const bandVan = new Map(punten.map((p, i) => [p.datum, i]));
+  const groepVan = new Map();
+
   punten.forEach((p, i) => {
     const x = i * band + (band - dikte) / 2;
     const groep = svgEl("g", {});   // alle segmenten van deze dag samen
@@ -1119,6 +1243,7 @@ function sportGrafiek(houder, dagen, opties = {}) {
     // Dag die nog loopt (vandaag): halfdoorzichtig, net als in de kcal-grafiek.
     if (p.deels) groep.setAttribute("fill-opacity", "0.45");
     g.append(groep);
+    groepVan.set(p.datum, groep);
 
     // Aanwijsvlak over de hele band: zweefvenster met totaal + elke activiteit.
     const hit = svgEl("rect", { x: i * band, y: 0, width: band, height: bh, fill: "transparent" });
@@ -1141,10 +1266,12 @@ function sportGrafiek(houder, dagen, opties = {}) {
         rect.left + ((m.l + i * band + band / 2) / B) * rect.width,
         rect.top + ((m.t + yVan(p.totaal)) / H) * rect.height,
         regels());
+      meldAanwijsdag(p.datum, houder);
     };
     const laatLos = () => {
       groep.removeAttribute("opacity");
       vastPunt = null;
+      meldAanwijsdag(null, houder);
       if (zweefVast && zweefVast.houder === houder) zweefVast = null;
     };
     hit.addEventListener("click", () => {
@@ -1167,13 +1294,34 @@ function sportGrafiek(houder, dagen, opties = {}) {
       if (vastPunt === p) { toonVast(); return; }
       groep.setAttribute("opacity", "0.75");
       toonZweefinfo(e.clientX, e.clientY, regels());
+      meldAanwijsdag(p.datum, houder);
     });
     hit.addEventListener("pointerleave", () => {
       if (vastPunt === p) { toonVast(); return; }
       groep.removeAttribute("opacity");
       verbergZweefinfo();
+      meldAanwijsdag(null, houder);
     });
     g.append(hit);
+  });
+
+  // Markering vanuit een andere grafiek (zelfde werking als bij de
+  // kcal-grafiek, maar met de gestapelde groep als "staaf").
+  let koppeldag = null;
+  koppelGrafiek(houder, (datum) => {
+    if (datum === koppeldag) return;
+    const oud = koppeldag != null && groepVan.get(koppeldag);
+    if (oud && !(vastPunt && vastPunt.datum === koppeldag)) oud.removeAttribute("opacity");
+    koppeldag = datum;
+    const i = datum != null ? bandVan.get(datum) : undefined;
+    if (i === undefined) {
+      koppelband.setAttribute("visibility", "hidden");
+      return;
+    }
+    const groep = groepVan.get(datum);
+    if (groep) groep.setAttribute("opacity", "0.75");
+    koppelband.setAttribute("x", i * band + (band - koppelbreedte) / 2);
+    koppelband.setAttribute("visibility", "visible");
   });
 
   if (opties.gemLijn && opties.gemLijn.length) tekenGemLijn(g, opties.gemLijn, punten, band, yVan);

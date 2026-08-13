@@ -38,6 +38,9 @@ Het dashboard heeft zes tabbladen:
   per dag en sport per dag, met periodefilters (7/14/30/90/180 dagen of alles).
   Hover over de gewichtsgrafiek toont gewicht, datum en BMI van die dag, plus —
   als er in `afbeeldingen/` een weegschaalfoto van die datum staat — de foto zelf.
+  De drie grafieken zijn aan elkaar gekoppeld (zoals in Grafana): wijs je een
+  dag aan in één grafiek, dan lichten de andere twee diezelfde dag mee op — de
+  staaf van die dag kleurt bij en de gewichtsgrafiek zet er een verticale lijn.
 - **Dagboek** — per dag porties eten loggen (uit de catalogus óf vrije invoer),
   sportactiviteiten toevoegen, je gewicht opslaan en een vrije dagnotitie
   bijhouden. "Kopieer van gisteren" neemt alle voeding van de vorige dag over.
