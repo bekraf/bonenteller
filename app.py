@@ -38,10 +38,10 @@ AFBEELDINGEN = HIER / "afbeeldingen"   # weegschaalfoto's (niet in git gesynct)
 # de database en in de frontend): kcal, vet, koolhydraten, eiwit, zout, vezels.
 VOEDING_KOLOMMEN = ("kcal", "vet", "koolhydraten", "eiwit", "zout", "vezels")
 
-# Toegelaten sporttypes. 'overig' bestaat als vangnet voor oude activiteiten
-# uit het rekenblad die niet herkend werden; de invoer in de app gebruikt de
-# andere vier.
-SPORT_TYPES = ("lopen", "fietsen", "krachttraining", "zwemmen", "overig")
+# Toegelaten sporttypes. 'overig' ving oorspronkelijk de oude activiteiten uit
+# het rekenblad op die niet herkend werden, maar is nu ook gewoon in de app te
+# kiezen (voor alles wat niet in de lijst staat).
+SPORT_TYPES = ("lopen", "wandelen", "fietsen", "krachttraining", "zwemmen", "overig")
 
 # Datums zijn overal tekst in ISO-vorm (JJJJ-MM-DD): dat sorteert vanzelf goed.
 DATUM_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -121,7 +121,7 @@ KLEUR_SLEUTELS = {
     "kleur_pagina", "kleur_oppervlak", "kleur_knoppen",
     "kleur_boven_max", "kleur_onder_min", "kleur_goed", "kleur_slecht",
     "kleur_nova1", "kleur_nova2", "kleur_nova3", "kleur_nova4",
-    "kleur_sport_lopen", "kleur_sport_fietsen",
+    "kleur_sport_lopen", "kleur_sport_wandelen", "kleur_sport_fietsen",
     "kleur_sport_krachttraining", "kleur_sport_zwemmen", "kleur_sport_overig",
 }
 KLEUR_RE = re.compile(r"^#[0-9a-f]{6}$")

@@ -960,12 +960,13 @@ function tekenGemLijn(g, gemLijn, punten, band, yVan) {
 // benoemen de types.
 const SPORT_KLEUREN = {
   lopen: "var(--sport-lopen)",
+  wandelen: "var(--sport-wandelen)",
   krachttraining: "var(--sport-krachttraining)",
   fietsen: "var(--sport-fietsen)",
   zwemmen: "var(--sport-zwemmen)",
-  overig: "var(--sport-overig)",   // onherkende oude invoer
+  overig: "var(--sport-overig)",   // alles wat niet in de lijst staat
 };
-const SPORT_VOLGORDE = ["lopen", "krachttraining", "fietsen", "zwemmen", "overig"];
+const SPORT_VOLGORDE = ["lopen", "wandelen", "krachttraining", "fietsen", "zwemmen", "overig"];
 
 function sportGrafiek(houder, dagen, opties = {}) {
   houder.replaceChildren();
@@ -1799,9 +1800,9 @@ document.getElementById("form-vrij").addEventListener("submit", async (e) => {
   } catch (fout) { toonMelding("melding-voeding", fout.message); }
 });
 
-// Snelheid is alleen zinvol bij lopen: bij fietsen en krachttraining
-// verdwijnt het veld. Kies je (opnieuw) lopen, dan staat het gebruikelijke
-// tempo van 11,6 km/u alvast ingevuld.
+// Snelheid is alleen zinvol bij lopen: bij de andere types (ook wandelen —
+// daar telt alleen de duur) verdwijnt het veld. Kies je (opnieuw) lopen, dan
+// staat het gebruikelijke tempo van 11,6 km/u alvast ingevuld.
 document.getElementById("sport-type").addEventListener("change", (e) => {
   const isLopen = e.target.value === "lopen";
   document.getElementById("sport-snelheid-label").classList.toggle("verborgen", !isLopen);
@@ -2275,10 +2276,11 @@ const KLEUR_INSTELLINGEN = [
   ["kleur_nova3", ["--nova3"], "NOVA 3", "bewerkt"],
   ["kleur_nova4", ["--nova4"], "NOVA 4", "ultrabewerkt"],
   ["kleur_sport_lopen", ["--sport-lopen"], "Sport: lopen", ""],
+  ["kleur_sport_wandelen", ["--sport-wandelen"], "Sport: wandelen", ""],
   ["kleur_sport_fietsen", ["--sport-fietsen"], "Sport: fietsen", ""],
   ["kleur_sport_krachttraining", ["--sport-krachttraining"], "Sport: krachttraining", ""],
   ["kleur_sport_zwemmen", ["--sport-zwemmen"], "Sport: zwemmen", ""],
-  ["kleur_sport_overig", ["--sport-overig"], "Sport: overig", "onherkende oude invoer"],
+  ["kleur_sport_overig", ["--sport-overig"], "Sport: overig", "alles wat niet in de lijst staat"],
 ];
 
 // De standaardkleuren uit stijl.css, vastgelegd bij het laden (vóór er
