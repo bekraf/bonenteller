@@ -180,6 +180,16 @@ main { padding: 16px 24px 48px; max-width: 1180px; margin: 0 auto; }
   font-variant-numeric: tabular-nums;
 }
 
+/* "+" boven een sportstaaf die door het plafond van de y-as breekt; de kleur
+   komt van het segment zelf (fill-attribuut in de SVG). Past net in de
+   bovenmarge van 12px. */
+.grafiek .sportplus {
+  font-size: 13px;
+  font-weight: 700;
+  font-family: system-ui, sans-serif;
+  pointer-events: none;
+}
+
 .grafiek .gridlijn { stroke: var(--gridlijn); stroke-width: 1; }
 .grafiek .aslijn { stroke: var(--aslijn); stroke-width: 1; }
 .grafiek .doellijn { stroke: var(--gedempt); stroke-width: 1; stroke-dasharray: 4 3; }

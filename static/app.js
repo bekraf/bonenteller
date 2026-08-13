@@ -967,6 +967,9 @@ const SPORT_KLEUREN = {
   overig: "var(--sport-overig)",   // alles wat niet in de lijst staat
 };
 const SPORT_VOLGORDE = ["lopen", "wandelen", "krachttraining", "fietsen", "zwemmen", "overig"];
+// Hoogste waarde die de y-as kan aannemen (minuten): een gewone sportdag is
+// ongeveer een uur, dus daarop schalen we. Uitschieters worden afgeknipt.
+const SPORT_PLAFOND = 60;
 
 function sportGrafiek(houder, dagen, opties = {}) {
   houder.replaceChildren();
@@ -992,11 +995,18 @@ function sportGrafiek(houder, dagen, opties = {}) {
              sport: d.sport, deels: d.datum === opties.loopt };
   });
 
-  // y-as: van 0 tot het drukste sportmoment, in nette stappen.
-  let yMax = Math.max(...punten.map((p) => p.totaal), 30);
+  // y-as: van 0 tot het drukste sportmoment, in nette stappen — maar nooit
+  // hoger dan SPORT_PLAFOND. Een zeldzame wandeldag van vier uur zou anders
+  // de dagelijkse loop- en krachtbeurten platdrukken tot streepjes. Wat
+  // boven het plafond uitkomt wordt afgeknipt (vlakke staaftop) en krijgt
+  // een "+" boven de staaf, in de kleur van het segment dat erdoorheen
+  // breekt; het zweefvenster toont nog altijd het échte totaal.
+  let yMax = Math.min(Math.max(...punten.map((p) => p.totaal), 30), SPORT_PLAFOND);
   const stap = nietteStappen(yMax, 4);
   yMax = Math.ceil(yMax / stap) * stap;
-  const yVan = (w) => bh - (w / yMax) * bh;
+  // Waarden boven het plafond plakken tegen de bovenrand (geldt ook voor de
+  // gemiddeldelijn, die zo binnen de grafiek blijft).
+  const yVan = (w) => bh - (Math.min(w, yMax) / yMax) * bh;
 
   const band = bw / punten.length;
   const dikte = Math.max(1, Math.min(24, band - 2));
@@ -1034,6 +1044,7 @@ function sportGrafiek(houder, dagen, opties = {}) {
   punten.forEach((p, i) => {
     const x = i * band + (band - dikte) / 2;
     const groep = svgEl("g", {});   // alle segmenten van deze dag samen
+    let plusKleur = null;   // kleur van het segment dat door het plafond breekt
 
     if (p.totaal <= 0) {
       // Rustdag: ministreepje op de basislijn.
@@ -1047,8 +1058,19 @@ function sportGrafiek(houder, dagen, opties = {}) {
       types.forEach((t, ti) => {
         const bodem = yVan(cum);
         const top = yVan(cum + p.perType[t]);
-        const bovenste = ti === types.length - 1;
-        if (bovenste) {
+        // Segment dat door het plafond breekt: vlak afknippen en de kleur
+        // onthouden voor het "+"-teken. Segmenten die er volledig bovenuit
+        // liggen zijn niet zichtbaar (bodem === top) en slaan we over.
+        const geknipt = cum + p.perType[t] > yMax;
+        if (geknipt && plusKleur === null) plusKleur = SPORT_KLEUREN[t];
+        const bovenste = ti === types.length - 1 && !geknipt;
+        if (bodem <= top) {
+          // niets zichtbaar meer: dit segment ligt helemaal boven het plafond
+        } else if (geknipt) {
+          groep.append(svgEl("rect", {
+            x, y: top, width: dikte, height: bodem - top, fill: SPORT_KLEUREN[t],
+          }));
+        } else if (bovenste) {
           // Bovenste segment: 4px afgeronde top, vlakke onderkant.
           const rond = Math.min(4, dikte / 2, bodem - top);
           groep.append(svgEl("path", {
@@ -1064,6 +1086,14 @@ function sportGrafiek(houder, dagen, opties = {}) {
         }
         cum += p.perType[t];
       });
+    }
+    // "+" boven een afgeknipte staaf: er ging méér tijd in dan het plafond
+    // toont. Staat in de bovenmarge, dus zonder de grafiek hoger te maken.
+    if (plusKleur) {
+      groep.append(svgEl("text", {
+        x: x + dikte / 2, y: -2, "text-anchor": "middle", fill: plusKleur,
+        class: "sportplus",
+      }, "+"));
     }
     // Dag die nog loopt (vandaag): halfdoorzichtig, net als in de kcal-grafiek.
     if (p.deels) groep.setAttribute("fill-opacity", "0.45");
