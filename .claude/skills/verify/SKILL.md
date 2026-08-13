@@ -46,4 +46,6 @@ de shell (exit 144) — gebruik `app[.]py` en aparte aanroepen.
 - Data checken: `sqlite3 gezondheid.db` — tabellen: gewichtmetingen,
   voedingslog, sportactiviteiten, voedingsmiddelen, instellingen, dagnotities
   (die laatste maakt app.py bij het opstarten aan als ze ontbreekt).
-- Dashboard telt t/m gisteren; gewichtmeting van vandaag telt wél mee.
+- Dashboardgrafieken lopen t/m vandaag (staaf van vandaag halfdoorzichtig,
+  zweeftekst "dag loopt nog"); de tegels en de weekgemiddeldelijnen rekenen
+  t/m gisteren. Gewichtmeting van vandaag telt wél mee.

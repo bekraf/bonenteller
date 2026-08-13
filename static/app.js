@@ -819,6 +819,10 @@ function staafGrafiek(houder, punten, opties = {}) {
         fill: kleur,
       });
     }
+    // Een dag die nog loopt (vandaag) tekenen we halfdoorzichtig: de staaf is
+    // nog niet af, en zo lees je hem niet als een echte dip. 'fill-opacity',
+    // want 'opacity' is van het oplichten bij hover.
+    if (p.deels) staaf.setAttribute("fill-opacity", "0.45");
     g.append(staaf);
 
     // Onzichtbaar aanwijsvlak over de volledige band(hoogte): veel makkelijker
@@ -826,7 +830,8 @@ function staafGrafiek(houder, punten, opties = {}) {
     // het zweefvenster; met 'bijKlik' is de band ook klikbaar (handwijzer).
     const hit = svgEl("rect", { x: i * band, y: 0, width: band, height: bh, fill: "transparent" });
     const regels = () => {
-      const r = [[`${fmt0.format(p.waarde)} kcal`, "zw-waarde"], [datumLang(p.datum), "zw-label"]];
+      const r = [[`${fmt0.format(p.waarde)} kcal`, "zw-waarde"],
+                 [datumLang(p.datum) + (p.deels ? " — dag loopt nog" : ""), "zw-label"]];
       if (p.week) r.push([p.week, "zw-label"]);
       if (p.detail) r.push([p.detail, "zw-label"]);
       if (p.notitie) r.push([`📝 ${p.notitie}`, "zw-notitie"]);
@@ -982,7 +987,8 @@ function sportGrafiek(houder, dagen, opties = {}) {
   const punten = dagen.map((d) => {
     const perType = {};
     for (const s of d.sport) perType[s.type] = (perType[s.type] || 0) + s.duur_minuten;
-    return { datum: d.datum, perType, totaal: d.sport.reduce((t, s) => t + s.duur_minuten, 0), sport: d.sport };
+    return { datum: d.datum, perType, totaal: d.sport.reduce((t, s) => t + s.duur_minuten, 0),
+             sport: d.sport, deels: d.datum === opties.loopt };
   });
 
   // y-as: van 0 tot het drukste sportmoment, in nette stappen.
@@ -1058,15 +1064,18 @@ function sportGrafiek(houder, dagen, opties = {}) {
         cum += p.perType[t];
       });
     }
+    // Dag die nog loopt (vandaag): halfdoorzichtig, net als in de kcal-grafiek.
+    if (p.deels) groep.setAttribute("fill-opacity", "0.45");
     g.append(groep);
 
     // Aanwijsvlak over de hele band: zweefvenster met totaal + elke activiteit.
     const hit = svgEl("rect", { x: i * band, y: 0, width: band, height: bh, fill: "transparent" });
     const regels = () => {
+      const datum = datumLang(p.datum) + (p.deels ? " — dag loopt nog" : "");
       const r = p.totaal > 0
-        ? [[`${fmt0.format(p.totaal)} min sport`, "zw-waarde"], [datumLang(p.datum), "zw-label"],
+        ? [[`${fmt0.format(p.totaal)} min sport`, "zw-waarde"], [datum, "zw-label"],
            ...p.sport.map((s) => [sportTekst(s), "zw-label"])]
-        : [["Geen sport", "zw-waarde"], [datumLang(p.datum), "zw-label"]];
+        : [[p.deels ? "Nog geen sport" : "Geen sport", "zw-waarde"], [datum, "zw-label"]];
       const week = opties.weekTekst && opties.weekTekst(p.datum);
       if (week) r.push([week, "zw-label"]);
       return r;
@@ -1150,13 +1159,18 @@ const BMI_BANDBREEDTE = (BMI_MIDDEN - BMI_ONDER) / BMI_BANDKLEUREN.length; // 0,
 const BMI_BUITEN = "var(--bmi-buiten)";   // onder-/overgewicht (vol aangezet)
 
 async function laadDashboard() {
-  // Alle statistieken lopen t/m GISTEREN: vandaag is nog niet af (na het
-  // ontbijt lijkt de dag anders maar 400 kcal), en zo'n halve dag zou alle
-  // gemiddelden, kleuren en grafieken scheeftrekken. De periode "laatste 7
-  // dagen" betekent dus: de 7 volledige dagen t/m gisteren.
-  const einde = plusDagen(vandaag(), -1);
+  // De grafieken lopen t/m VANDAAG, zodat je meteen ziet wat er vandaag al
+  // op de teller staat. De statistieken (de tegels en de weekgemiddeldes)
+  // rekenen wél t/m gisteren: vandaag is nog niet af — na het ontbijt lijkt
+  // de dag anders maar 400 kcal — en zo'n halve dag zou alle gemiddelden en
+  // kleuren scheeftrekken. Zelfde conventie als het weekoverzicht, dat de
+  // huidige dag wel toont maar niet meetelt.
+  // De periode "laatste 7 dagen" blijft dus de 7 volledige dagen t/m
+  // gisteren; vandaag komt er in de grafieken als extra dag achteraan bij.
+  const einde = vandaag();
+  const eindeVolledig = plusDagen(einde, -1);
   const van = filterDagen === "jaar" ? `${new Date().getFullYear()}-01-01`
-    : filterDagen ? plusDagen(einde, -filterDagen + 1) : "0001-01-01";
+    : filterDagen ? plusDagen(eindeVolledig, -filterDagen + 1) : "0001-01-01";
 
   // Gewichten, dagtotalen en de lijst weegschaalfoto's parallel ophalen.
   // De dagtotalen komen een stukje ruimer binnen dan de periode zelf: het
@@ -1164,16 +1178,17 @@ async function laadDashboard() {
   // vórige weging, en voor de eerste meting binnen beeld ligt die weging
   // vóór de periode. 35 dagen extra dekt ruim een maand tussen twee wegingen.
   const dagenVan = filterDagen ? plusDagen(van, -35) : van;
-  // De notities lopen t/m vandaag: als er vandaag al gewogen is, reikt de
-  // grafiek tot vandaag en hoort de notitie van vandaag er ook bij.
   const [gewichten, dagenRuim, fotos, notities] = await Promise.all([
     api("/api/gewicht"),
     api(`/api/dagen?van=${dagenVan}&tot=${einde}`),
     api("/api/afbeeldingen"),
-    api(`/api/notities?van=${dagenVan}&tot=${vandaag()}`),
+    api(`/api/notities?van=${dagenVan}&tot=${einde}`),
   ]);
-  // Alles behalve dat zweefvenster rekent op de gekozen periode zelf.
-  const dagen = dagenRuim.filter((d) => d.datum >= van);
+  // Alles behalve dat zweefvenster rekent op de gekozen periode zelf. Twee
+  // lijsten: de grafieken tekenen de periode inclusief vandaag, alle
+  // gemiddelden rekenen op diezelfde periode zonder vandaag.
+  const dagenGrafiek = dagenRuim.filter((d) => d.datum >= van);
+  const dagen = dagenGrafiek.filter((d) => d.datum <= eindeVolledig);
   // Mét onderrapportage-correctie: het zweefvenster van de gewichtsgrafiek
   // kleurt het weekgemiddelde t.o.v. de richtlijn, en die vergelijking moet
   // dezelfde zijn als in de kcal-grafiek (die de gecorrigeerde waarden toont).
@@ -1234,7 +1249,7 @@ async function laadDashboard() {
   // "van begin jaar", en anders (Alles) sinds de eerste dag met gegevens.
   const periodeStart = filterDagen === "jaar" ? van : dagen.length ? dagen[0].datum : null;
   const periodeDagen = typeof filterDagen === "number" && filterDagen ? filterDagen
-    : periodeStart ? Math.round((naarDatum(einde) - naarDatum(periodeStart)) / DAG_MS) + 1 : 1;
+    : periodeStart ? Math.round((naarDatum(eindeVolledig) - naarDatum(periodeStart)) / DAG_MS) + 1 : 1;
   const minPerWeek = sportMin / periodeDagen * 7;
   tegels.append(el("div", { class: "tegel" },
     el("div", { class: "label" }, "Gem. Sport Per Week"),
@@ -1254,17 +1269,17 @@ async function laadDashboard() {
      Alle grafieken krijgen hetzelfde datumbereik en één band per kalenderdag,
      zodat dezelfde datum overal recht onder elkaar staat en je waardes
      verticaal kunt vergelijken. Het bereik loopt van het begin van de periode
-     (bij 'Alles': de eerste dag met gegevens) tot gisteren, of tot vandaag
-     als er vandaag al gewogen is (die meting telt immers mee). */
+     (bij 'Alles': de eerste dag met gegevens) tot en met vandaag — of nog
+     verder, mocht er een weging met een datum in de toekomst instaan. */
   const laatsteMeting = gewichtBereik[gewichtBereik.length - 1];
   const domeinTot = laatsteMeting && laatsteMeting.datum > einde ? laatsteMeting.datum : einde;
   const eersteData = [gewichtBereik[0] && gewichtBereik[0].datum,
-                      dagen[0] && dagen[0].datum].filter(Boolean).sort()[0];
+                      dagenGrafiek[0] && dagenGrafiek[0].datum].filter(Boolean).sort()[0];
   const bereik = { van: filterDagen ? van : (eersteData || domeinTot), tot: domeinTot };
 
   // De dagenlijst van de API bevat alleen dagen mét gegevens; hier vullen we
   // de gaten op met lege dagen zodat elke kalenderdag exact één band inneemt.
-  const dagPerDatum = Object.fromEntries(dagen.map((d) => [d.datum, d]));
+  const dagPerDatum = Object.fromEntries(dagenGrafiek.map((d) => [d.datum, d]));
   const alleDagen = [];
   for (let d = bereik.van; d <= bereik.tot; d = plusDagen(d, 1)) {
     alleDagen.push(dagPerDatum[d] || { datum: d, kcal: 0, sport: [] });
@@ -1337,16 +1352,21 @@ async function laadDashboard() {
   const weekGem = new Map();        // vrijdag -> gemiddelde kcal per eetdag
   const gemLijn = [];               // één lijnpunt in het midden van elke week
   for (const [start, weekDagen] of dagenPerWeek) {
-    const eetdagen = weekDagen.filter((d) => d.kcal > 0);
+    // Vandaag staat wel in de staven maar niet in het weekgemiddelde: de
+    // lopende week zou anders elke ochtend een duik maken. De lijn loopt dus
+    // ook tot het midden van de volledige dagen, niet tot vandaag.
+    const volledig = weekDagen.filter((d) => d.datum <= eindeVolledig);
+    const eetdagen = volledig.filter((d) => d.kcal > 0);
     if (!eetdagen.length) continue;
     const gem = eetdagen.reduce((s, d) => s + metOnderrapportage(d.kcal), 0) / eetdagen.length;
     weekGem.set(start, gem);
-    gemLijn.push({ datum: weekDagen[Math.floor((weekDagen.length - 1) / 2)].datum, waarde: gem });
+    gemLijn.push({ datum: volledig[Math.floor((volledig.length - 1) / 2)].datum, waarde: gem });
   }
 
   staafGrafiek(document.getElementById("grafiek-kcal"),
     alleDagen.map((d) => ({
       datum: d.datum, waarde: metOnderrapportage(d.kcal),
+      deels: d.datum === einde,                     // vandaag: nog niet af
       week: weekGem.has(weekStartVan(d.datum))                // weekgemiddelde
         ? `week gem. ${fmt0.format(weekGem.get(weekStartVan(d.datum)))} kcal per eetdag`
         : "",
@@ -1397,15 +1417,19 @@ async function laadDashboard() {
   const sportWeek = new Map();      // vrijdag -> { gem (min/dag), totaal (min) }
   const sportGemLijn = [];          // één lijnpunt in het midden van elke week
   for (const [start, weekDagen] of dagenPerWeek) {
-    const totaal = weekDagen.reduce(
+    // Ook hier telt vandaag niet mee: de dag kan nog een sportbeurt krijgen.
+    const volledig = weekDagen.filter((d) => d.datum <= eindeVolledig);
+    if (!volledig.length) continue;
+    const totaal = volledig.reduce(
       (s, d) => s + d.sport.reduce((t, a) => t + a.duur_minuten, 0), 0);
-    const gem = totaal / weekDagen.length;
+    const gem = totaal / volledig.length;
     sportWeek.set(start, { gem, totaal });
-    sportGemLijn.push({ datum: weekDagen[Math.floor((weekDagen.length - 1) / 2)].datum, waarde: gem });
+    sportGemLijn.push({ datum: volledig[Math.floor((volledig.length - 1) / 2)].datum, waarde: gem });
   }
 
   sportGrafiek(document.getElementById("grafiek-sport"), alleDagen, {
     gemLijn: sportGemLijn,
+    loopt: einde,                 // vandaag: staaf halfdoorzichtig
     weekTekst: (datum) => {
       const w = sportWeek.get(weekStartVan(datum));
       return w ? `week: ${fmt0.format(w.totaal)} min gesport — gem. ${fmt.format(w.gem)} min per dag` : "";
@@ -1418,7 +1442,7 @@ async function laadDashboard() {
   const sportHouder = document.getElementById("grafiek-sport");
   const sportGemUit = sportHouder.classList.contains("zonder-gemlijn");
   const aanwezig = SPORT_VOLGORDE.filter((t) =>
-    dagen.some((d) => d.sport.some((s) => s.type === t)));
+    dagenGrafiek.some((d) => d.sport.some((s) => s.type === t)));
   document.getElementById("legende-sport").replaceChildren(
     ...aanwezig.map((t) => el("span", { class: "sleutel" },
       el("span", { class: "vlak", style: `background:${SPORT_KLEUREN[t]}` }), t)),
