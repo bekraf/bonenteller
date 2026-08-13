@@ -733,6 +733,11 @@ function lijnGrafiek(houder, punten, opties = {}) {
      minLijn / minLabel — horizontale richtlijn onder (bv. min 1.800 kcal)
      kleurVan           — functie waarde -> kleur, om elke staaf te kleuren
                           naargelang de waarde (anders de standaardblauw)
+     verborgen          — functie punt -> waar/onwaar; staven waarvoor dit
+                          waar is worden niet getekend (legende-item
+                          weggeklikt). De dag houdt wel zijn plek op de x-as,
+                          zodat de datums onder de andere grafieken blijven
+                          staan; de y-as schaalt op wat er nog te zien is
      gemLijn            — [{datum, waarde}]: vloeiende lijn bovenop de staven
                           (bv. het weekgemiddelde), één punt per week in het
                           midden van die week
@@ -760,7 +765,14 @@ function staafGrafiek(houder, punten, opties = {}) {
   // ligt vlak boven de hoogste staaf (of de richtlijn): maximum + 200 kcal,
   // zodat er geen lap lege ruimte boven de grafiek gaapt. De gridlijnen
   // blijven wel op ronde getallen staan.
-  const yMax = Math.max(...punten.map((p) => p.waarde), opties.maxLijn || 0) + 200;
+  // Alleen de zichtbare staven bepalen de hoogte: klik je een categorie weg,
+  // dan zoomt de grafiek in op wat er overblijft. De gemiddeldelijn telt mee
+  // zodat die nooit boven de grafiek uit steekt (ze ligt normaal onder de
+  // hoogste staaf, dus in de volle weergave verandert er niets).
+  const zichtbaar = punten.filter((p) => !(opties.verborgen && opties.verborgen(p)));
+  const yMax = Math.max(...zichtbaar.map((p) => p.waarde),
+                        ...(opties.gemLijn || []).map((p) => p.waarde),
+                        opties.maxLijn || 0, 0) + 200;
   const stap = nietteStappen(yMax, 5);
   const yVan = (w) => bh - (w / yMax) * bh;
 
@@ -799,6 +811,9 @@ function staafGrafiek(houder, punten, opties = {}) {
   }
 
   punten.forEach((p, i) => {
+    // Weggeklikte categorie: geen staaf en ook geen aanwijsvlak — de band
+    // blijft leeg, maar behoudt zijn breedte zodat de x-as niet verschuift.
+    if (opties.verborgen && opties.verborgen(p)) return;
     const x = i * band + (band - dikte) / 2;
     const y = yVan(p.waarde);
     const hoogte = bh - y;
@@ -954,7 +969,10 @@ function tekenGemLijn(g, gemLijn, punten, band, yVan) {
      gemLijn   — [{datum, waarde}]: vloeiende weekgemiddeldelijn bovenop de
                  staven, zoals bij de kcal-grafiek
      weekTekst — functie datum -> tekstregel over de week van die datum,
-                 als extra regel in het zweefvenster */
+                 als extra regel in het zweefvenster
+     toonType  — functie sporttype -> waar/onwaar; types waarvoor dit onwaar
+                 is (legende-item weggeklikt) tellen nergens mee: niet in de
+                 staaf, niet in het dagtotaal en niet in het zweefvenster */
 // De kleur per type komt uit een CSS-variabele (standaard in stijl.css,
 // aanpasbaar op het Instellingen-tabblad); de legende en het zweefvenster
 // benoemen de types.
@@ -988,11 +1006,14 @@ function sportGrafiek(houder, dagen, opties = {}) {
   const bw = B - m.l - m.r, bh = H - m.t - m.b;
 
   // Per dag de minuten optellen per type (meerdere activiteiten kunnen).
+  // Weggeklikte types vallen hier al af, zodat de staaf, het dagtotaal en het
+  // zweefvenster hetzelfde verhaal vertellen.
   const punten = dagen.map((d) => {
+    const sport = opties.toonType ? d.sport.filter((s) => opties.toonType(s.type)) : d.sport;
     const perType = {};
-    for (const s of d.sport) perType[s.type] = (perType[s.type] || 0) + s.duur_minuten;
-    return { datum: d.datum, perType, totaal: d.sport.reduce((t, s) => t + s.duur_minuten, 0),
-             sport: d.sport, deels: d.datum === opties.loopt };
+    for (const s of sport) perType[s.type] = (perType[s.type] || 0) + s.duur_minuten;
+    return { datum: d.datum, perType, totaal: sport.reduce((t, s) => t + s.duur_minuten, 0),
+             sport, deels: d.datum === opties.loopt };
   });
 
   // y-as: van 0 tot het drukste sportmoment, in nette stappen — maar nooit
@@ -1164,6 +1185,33 @@ function sportGrafiek(houder, dagen, opties = {}) {
 
 let instellingen = {};   // doelgewicht, lengte, richtlijnen — geladen bij start
 let filterDagen = 30;    // actieve periodefilter (0 = alles, "jaar" = sinds 1 januari)
+
+// Weggeklikte legende-items van de kcal- en de sportgrafiek. Anders dan de
+// gemiddeldelijn (die verborgen start) is hier standaard álles zichtbaar: de
+// sets zijn leeg tot je zelf iets uitvinkt. De keuze overleeft een
+// periodewissel en een tabwissel, en reset bij herladen — net als de
+// gemiddeldelijn.
+const kcalUit = new Set();    // categoriesleutels: "goed" | "onder" | "boven"
+const sportUit = new Set();   // sporttypes: "lopen", "wandelen", ...
+
+// De drie kcal-categorieën: sleutel, kleur en het label in de legende. De
+// staafkleur en het legende-item komen zo uit dezelfde bron.
+const KCAL_CATEGORIEEN = [
+  ["goed", "var(--kcal-goed)", "binnen richtlijn"],
+  ["onder", "var(--kcal-onder)", "onder min"],
+  ["boven", "var(--kcal-boven)", "boven max"],
+];
+
+/* Legende-item dat een reeks aan/uit zet: gekleurd blokje + naam, gedimd
+   ('uit') zodra het weggeklikt is. 'uit' is hier de vraag of het item nú
+   uitstaat, 'omschakelen' draait die keuze om en tekent opnieuw. */
+function filterSleutel(kleur, label, uit, omschakelen) {
+  return el("span", {
+    class: "sleutel klikbaar" + (uit ? " uit" : ""),
+    title: `klik om "${label}" te tonen of te verbergen`,
+    onclick: omschakelen,
+  }, el("span", { class: "vlak", style: `background:${kleur}` }), label);
+}
 
 // Periodeknoppen: één filterrij die alles op het dashboard herschaalt.
 document.getElementById("bereikfilters").addEventListener("click", (e) => {
@@ -1363,11 +1411,15 @@ async function laadDashboard() {
   const kcalMin = instellingen.kcal_min, kcalMax = instellingen.kcal_max;
   // Zelfde betekenis als in de tabellen: groen binnen de richtlijn,
   // rood boven het maximum, amber onder het minimum.
-  const kcalKleur = (w) => {
-    if (kcalMax != null && w > kcalMax) return "var(--kcal-boven)";
-    if (kcalMin != null && w < kcalMin) return "var(--kcal-onder)";
-    return "var(--kcal-goed)";
+  // Eén functie bepaalt de categorie van een dag; daaruit volgen zowel de
+  // staafkleur als het legende-item dat die dagen weg kan klikken.
+  const kcalCategorie = (w) => {
+    if (kcalMax != null && w > kcalMax) return "boven";
+    if (kcalMin != null && w < kcalMin) return "onder";
+    return "goed";
   };
+  const kcalKleur = (w) =>
+    KCAL_CATEGORIEEN.find(([sleutel]) => sleutel === kcalCategorie(w))[1];
   // Weekgemiddelde bovenop de staven: weken lopen van vrijdag t/m donderdag
   // (weegdag tot weegdag, zoals het weekoverzicht), zodat de lijn hetzelfde
   // ritme volgt als de wegingen. Alleen eetdagen (kcal > 0) tellen mee, net
@@ -1394,19 +1446,26 @@ async function laadDashboard() {
     gemLijn.push({ datum: volledig[Math.floor((volledig.length - 1) / 2)].datum, waarde: gem });
   }
 
-  staafGrafiek(document.getElementById("grafiek-kcal"),
-    alleDagen.map((d) => ({
-      datum: d.datum, waarde: metOnderrapportage(d.kcal),
-      deels: d.datum === einde,                     // vandaag: nog niet af
-      week: weekGem.has(weekStartVan(d.datum))                // weekgemiddelde
-        ? `week gem. ${fmt0.format(weekGem.get(weekStartVan(d.datum)))} kcal per eetdag`
-        : "",
-      detail: d.sport.map(sportTekst).join(" · "),  // sport in het zweefvenster
-      notitie: notities[d.datum],                   // dagnotitie idem
-    })),
-    {
+  const kcalPunten = alleDagen.map((d) => ({
+    datum: d.datum, waarde: metOnderrapportage(d.kcal),
+    deels: d.datum === einde,                     // vandaag: nog niet af
+    week: weekGem.has(weekStartVan(d.datum))                // weekgemiddelde
+      ? `week gem. ${fmt0.format(weekGem.get(weekStartVan(d.datum)))} kcal per eetdag`
+      : "",
+    detail: d.sport.map(sportTekst).join(" · "),  // sport in het zweefvenster
+    notitie: notities[d.datum],                   // dagnotitie idem
+  }));
+
+  // Grafiek + legende in één functie: elk weggeklikt legende-item tekent
+  // beide opnieuw, zonder de gegevens opnieuw op te halen.
+  const kcalHouder = document.getElementById("grafiek-kcal");
+  function tekenKcal() {
+    staafGrafiek(kcalHouder, kcalPunten, {
       gemLijn,
       kleurVan: kcalMin != null || kcalMax != null ? kcalKleur : null,
+      // Weggeklikte categorieën vallen weg. Lege dagen (0 kcal) blijven altijd
+      // staan: die zijn niet "onder min", daar is gewoon niets ingevuld.
+      verborgen: (p) => p.waarde > 0 && kcalUit.has(kcalCategorie(p.waarde)),
       maxLijn: kcalMax, maxLabel: kcalMax ? `max ${fmt0.format(kcalMax)}` : "",
       minLijn: kcalMin, minLabel: kcalMin ? `min ${fmt0.format(kcalMin)}` : "",
       // Klik op een staaf = het dagboek van die dag openen (zelfde gedrag
@@ -1418,25 +1477,24 @@ async function laadDashboard() {
       },
     });
 
-  // Legende bij de kcal-grafiek (kleur draagt hier betekenis).
-  // Het weekgemiddelde-item is klikbaar: het schakelt de lijn aan/uit via een
-  // CSS-klasse op de grafiekhouder — die div overleeft een periodewissel,
-  // dus de keuze blijft staan tot de pagina herlaadt.
-  const kcalHouder = document.getElementById("grafiek-kcal");
-  const gemUit = kcalHouder.classList.contains("zonder-gemlijn");
-  document.getElementById("legende-kcal").replaceChildren(
-    ...[["var(--kcal-goed)", "binnen richtlijn"], ["var(--kcal-onder)", "onder min"],
-        ["var(--kcal-boven)", "boven max"]]
-      .map(([kleur, label]) => el("span", { class: "sleutel" },
-        el("span", { class: "vlak", style: `background:${kleur}` }), label)),
-    el("span", {
-      class: "sleutel klikbaar" + (gemUit ? " uit" : ""),
-      title: "klik om de gemiddeldelijn te tonen of te verbergen",
-      onclick: (e) => {
+    // Legende bij de kcal-grafiek (kleur draagt hier betekenis). Elk item is
+    // klikbaar: de drie categorieën verbergen hun staven, het laatste item
+    // schakelt de gemiddeldelijn aan/uit via een CSS-klasse op de
+    // grafiekhouder — die div overleeft een periodewissel, dus alle keuzes
+    // blijven staan tot de pagina herlaadt.
+    const gemUit = kcalHouder.classList.contains("zonder-gemlijn");
+    document.getElementById("legende-kcal").replaceChildren(
+      ...KCAL_CATEGORIEEN.map(([sleutel, kleur, label]) =>
+        filterSleutel(kleur, label, kcalUit.has(sleutel), () => {
+          if (!kcalUit.delete(sleutel)) kcalUit.add(sleutel);
+          tekenKcal();
+        })),
+      filterSleutel("var(--gewichtslijn)", "weekgemiddelde", gemUit, (e) => {
         kcalHouder.classList.toggle("zonder-gemlijn");
         e.currentTarget.classList.toggle("uit");
-      },
-    }, el("span", { class: "vlak", style: "background:var(--gewichtslijn)" }), "weekgemiddelde"));
+      }));
+  }
+  tekenKcal();
 
   /* --- sportgrafiek: minuten per dag, kleur per type --- */
   // Weekgemiddelde: zelfde weekindeling als bij kcal (vrijdag t/m donderdag),
@@ -1445,46 +1503,55 @@ async function laadDashboard() {
   // (dezelfde schaal als de staven); het zweefvenster vermeldt daarnaast het
   // weektotaal, want "minuten per week" is het getal waar je op stuurt.
   // Randweken die maar half in beeld staan, middelen over de zichtbare dagen.
-  const sportWeek = new Map();      // vrijdag -> { gem (min/dag), totaal (min) }
-  const sportGemLijn = [];          // één lijnpunt in het midden van elke week
-  for (const [start, weekDagen] of dagenPerWeek) {
-    // Ook hier telt vandaag niet mee: de dag kan nog een sportbeurt krijgen.
-    const volledig = weekDagen.filter((d) => d.datum <= eindeVolledig);
-    if (!volledig.length) continue;
-    const totaal = volledig.reduce(
-      (s, d) => s + d.sport.reduce((t, a) => t + a.duur_minuten, 0), 0);
-    const gem = totaal / volledig.length;
-    sportWeek.set(start, { gem, totaal });
-    sportGemLijn.push({ datum: volledig[Math.floor((volledig.length - 1) / 2)].datum, waarde: gem });
-  }
-
-  sportGrafiek(document.getElementById("grafiek-sport"), alleDagen, {
-    gemLijn: sportGemLijn,
-    loopt: einde,                 // vandaag: staaf halfdoorzichtig
-    weekTekst: (datum) => {
-      const w = sportWeek.get(weekStartVan(datum));
-      return w ? `week: ${fmt0.format(w.totaal)} min gesport — gem. ${fmt.format(w.gem)} min per dag` : "";
-    },
-  });
-
-  // Legende: alleen de types die in deze periode voorkomen, met hun vaste
-  // kleur (een type behoudt altijd dezelfde kleur). Het weekgemiddelde-item
-  // is klikbaar en schakelt de lijn aan/uit, net als bij de kcal-grafiek.
-  const sportHouder = document.getElementById("grafiek-sport");
-  const sportGemUit = sportHouder.classList.contains("zonder-gemlijn");
+  // Welke types staan er in deze periode? Die lijst bepaalt de legende en
+  // verandert niet mee met wat je wegklikt: een weggeklikt type blijft in de
+  // legende staan (gedimd), anders kon je het nooit meer terugzetten.
   const aanwezig = SPORT_VOLGORDE.filter((t) =>
     dagenGrafiek.some((d) => d.sport.some((s) => s.type === t)));
-  document.getElementById("legende-sport").replaceChildren(
-    ...aanwezig.map((t) => el("span", { class: "sleutel" },
-      el("span", { class: "vlak", style: `background:${SPORT_KLEUREN[t]}` }), t)),
-    el("span", {
-      class: "sleutel klikbaar" + (sportGemUit ? " uit" : ""),
-      title: "klik om de gemiddeldelijn te tonen of te verbergen",
-      onclick: (e) => {
+
+  const sportHouder = document.getElementById("grafiek-sport");
+  function tekenSport() {
+    // Weggeklikte types tellen ook in het weekgemiddelde en het zweefvenster
+    // niet mee, zodat de lijn bij de staven blijft passen.
+    const toonType = (t) => !sportUit.has(t);
+    const sportWeek = new Map();    // vrijdag -> { gem (min/dag), totaal (min) }
+    const sportGemLijn = [];        // één lijnpunt in het midden van elke week
+    for (const [start, weekDagen] of dagenPerWeek) {
+      // Ook hier telt vandaag niet mee: de dag kan nog een sportbeurt krijgen.
+      const volledig = weekDagen.filter((d) => d.datum <= eindeVolledig);
+      if (!volledig.length) continue;
+      const totaal = volledig.reduce((s, d) => s + d.sport.reduce(
+        (t, a) => t + (toonType(a.type) ? a.duur_minuten : 0), 0), 0);
+      const gem = totaal / volledig.length;
+      sportWeek.set(start, { gem, totaal });
+      sportGemLijn.push({ datum: volledig[Math.floor((volledig.length - 1) / 2)].datum, waarde: gem });
+    }
+
+    sportGrafiek(sportHouder, alleDagen, {
+      gemLijn: sportGemLijn,
+      loopt: einde,                 // vandaag: staaf halfdoorzichtig
+      toonType,
+      weekTekst: (datum) => {
+        const w = sportWeek.get(weekStartVan(datum));
+        return w ? `week: ${fmt0.format(w.totaal)} min gesport — gem. ${fmt.format(w.gem)} min per dag` : "";
+      },
+    });
+
+    // Legende: de types uit deze periode met hun vaste kleur (een type
+    // behoudt altijd dezelfde kleur). Elk item verbergt zijn eigen type; het
+    // laatste item schakelt de gemiddeldelijn aan/uit, net als bij kcal.
+    const sportGemUit = sportHouder.classList.contains("zonder-gemlijn");
+    document.getElementById("legende-sport").replaceChildren(
+      ...aanwezig.map((t) => filterSleutel(SPORT_KLEUREN[t], t, sportUit.has(t), () => {
+        if (!sportUit.delete(t)) sportUit.add(t);
+        tekenSport();
+      })),
+      filterSleutel("var(--gewichtslijn)", "weekgemiddelde", sportGemUit, (e) => {
         sportHouder.classList.toggle("zonder-gemlijn");
         e.currentTarget.classList.toggle("uit");
-      },
-    }, el("span", { class: "vlak", style: "background:var(--gewichtslijn)" }), "weekgemiddelde"));
+      }));
+  }
+  tekenSport();
 }
 
 /* ================= 5. Dagboek ================= */

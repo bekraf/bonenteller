@@ -300,8 +300,10 @@ td.gedempt { color: var(--gedempt); }
 .legende .sleutel { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--inkt-2); }
 .legende .vlak { width: 12px; height: 12px; border-radius: 3px; }
 
-/* Klikbaar legende-item (weekgemiddeldelijn aan/uit): gedimd als de lijn
-   verborgen is; de grafiekhouder krijgt dan de klasse 'zonder-gemlijn'. */
+/* Klikbaar legende-item (een kleurcategorie, een sporttype of de
+   weekgemiddeldelijn aan/uit): gedimd zodra die reeks verborgen is. Bij de
+   gemiddeldelijn krijgt de grafiekhouder dan de klasse 'zonder-gemlijn'; de
+   staven worden bij het hertekenen gewoon weggelaten. */
 .legende .sleutel.klikbaar { cursor: pointer; user-select: none; }
 .legende .sleutel.uit { opacity: 0.45; }
 .zonder-gemlijn .gemlijn { display: none; }
