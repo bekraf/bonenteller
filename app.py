@@ -90,7 +90,12 @@ def eis_datum(waarde):
 
 
 def eis_getal(waarde, naam, minimum=None):
-    """Zet invoer om naar een getal en bewaak een ondergrens."""
+    """Zet invoer om naar een getal en bewaak een ondergrens.
+
+    Een komma mag als decimaalteken: "1,1" en "1.1" zijn allebei 1,1.
+    """
+    if isinstance(waarde, str):
+        waarde = waarde.strip().replace(",", ".")
     try:
         getal = float(waarde)
     except (TypeError, ValueError):

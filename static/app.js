@@ -36,6 +36,13 @@ const DAG_MS = 24 * 3600 * 1000; // één dag in milliseconden
 const fmt = new Intl.NumberFormat("nl-BE", { maximumFractionDigits: 1 });
 const fmt0 = new Intl.NumberFormat("nl-BE", { maximumFractionDigits: 0 });
 
+// Een hoeveelheid in een invoerveld zetten zoals je ze hier typt: met komma
+// (1,1) in plaats van het punt dat JavaScript gebruikt. De server aanvaardt
+// allebei, dus wat je zelf typt hoeft niet omgezet te worden.
+function invoerGetal(waarde) {
+  return String(waarde ?? "").replace(".", ",");
+}
+
 // el("td", {class: "getal"}, "12") — kort hulpje om HTML-elementen te bouwen.
 // Kinderen die geen DOM-knoop zijn worden tekstknopen (veilig voor rare tekens).
 function el(tag, attrs = {}, ...kinderen) {
@@ -1757,7 +1764,7 @@ document.getElementById("vm-zoek").addEventListener("input", () => {
   // De laatst gelogde hoeveelheid van dit item alvast invullen: wie 250 g
   // havermout logt, logt de volgende keer meestal weer 250 g.
   if (vm && vm.laatste_hoeveelheid) {
-    document.getElementById("vm-hoeveelheid").value = vm.laatste_hoeveelheid;
+    document.getElementById("vm-hoeveelheid").value = invoerGetal(vm.laatste_hoeveelheid);
   }
 });
 
@@ -1845,8 +1852,11 @@ async function laadDag() {
           veldUur = el("input", {
             type: "number", min: 0, max: 24, value: r.uur ?? "", style: "width:56px",
           });
+          // Tekstveld met cijfertoetsenbord: zo mag je ook een komma typen
+          // (1,1) — een type="number"-veld gooit die in de meeste browsers weg.
           veldHoev = el("input", {
-            type: "number", step: 1, min: 1, value: r.hoeveelheid, style: "width:80px",
+            type: "text", inputmode: "decimal", value: invoerGetal(r.hoeveelheid),
+            style: "width:80px",
           });
           const velden = [veldUur, veldHoev];
           if (vrij) {
@@ -2020,7 +2030,7 @@ document.getElementById("form-voeding").addEventListener("submit", async (e) => 
     // Formulier leegmaken voor de volgende invoer.
     document.getElementById("vm-zoek").value = "";
     document.getElementById("vm-eenheid").textContent = "";
-    document.getElementById("vm-hoeveelheid").value = 1;
+    document.getElementById("vm-hoeveelheid").value = "1";
     laadDag();
   } catch (fout) { toonMelding("melding-voeding", fout.message); }
 });
