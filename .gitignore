@@ -1,0 +1,3 @@
+# De gebakken publieke site (zie bouw_publiek.py); wordt in GitHub Actions
+# opnieuw gemaakt en hoort niet in git.
+uit/

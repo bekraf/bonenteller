@@ -75,11 +75,42 @@ static/
   stijl.css       # opmaak
   manifest.json   # webmanifest (installeren op het beginscherm)
   icoon-*.png     # app-iconen
+bouw_publiek.py   # bakt de publieke alleen-lezen site (zie hieronder)
+publiek/
+  leesmodus.js    # bedient /api/... uit gebakken JSON; blokkeert schrijven
+  leesmodus.css   # verbergt alle invoer
 ```
 
 `app.py` bevat, van boven naar beneden: hulpfuncties en invoervalidatie, de
 API-functies (één per endpoint), en de HTTP-handler die URL's naar die functies
 routeert.
+
+## Publieke website (alleen lezen)
+
+Naast de lokale app staat er een publieke versie op GitHub Pages waar anderen
+kunnen meekijken. Het is dezelfde frontend, maar zonder server: `bouw_publiek.py`
+schrijft elk API-antwoord één keer naar een bestand in `uit/data/`, en
+`publiek/leesmodus.js` vangt `fetch()` op en bedient elke `GET /api/…` uit die
+bestanden. Schrijfacties krijgen een `403` met een melding; `publiek/leesmodus.css`
+verbergt alle invoer en het tabblad Instellingen. `static/app.js` blijft dus
+onveranderd — die heeft maar één `fetch()`, in `api()`.
+
+Het script roept de API-functies uit `app.py` zelf aan, zodat de gebakken JSON
+niet kan gaan afwijken van wat de lokale server geeft.
+
+```bash
+python3 bouw_publiek.py            # bouwt uit/
+python3 -m http.server -d uit 8080 # even bekijken op http://127.0.0.1:8080
+```
+
+De publicatie loopt vanzelf: de systemd-timer pusht `gezondheid.db` elk uur naar
+GitHub, en `.github/workflows/pages.yml` bouwt bij elke push de site opnieuw en
+zet ze op Pages. De gebakken site komt niet in git (`uit/` staat in `.gitignore`).
+
+Wat er **niet** in de publieke site zit: de weegschaalfoto's (`afbeeldingen.json`
+blijft leeg — de zweefinfo werkt gewoon zonder foto) en alles wat schrijft. Wat er
+wel in zit: alle gewicht-, voedings- en sportdata, inclusief de downloads van de
+database en de CSV's — die staan sowieso al in de publieke repo.
 
 ## Database
 

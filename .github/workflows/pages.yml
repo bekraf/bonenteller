@@ -1,0 +1,52 @@
+# Publiceert de alleen-lezen website op GitHub Pages.
+#
+# Draait bij elke push naar main (dus ook bij de push van autopush.sh, die
+# gezondheid.db elk uur naar GitHub zet): bouw_publiek.py bakt de site uit de
+# database en het resultaat gaat rechtstreeks naar Pages. Er komt dus niets
+# afgeleids in git terecht.
+#
+# Eenmalig instellen: Settings -> Pages -> Source: GitHub Actions.
+
+name: Publieke website
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:      # ook met de hand te starten
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Eén publicatie tegelijk; een nieuwe push laat een lopende build gewoon
+# afmaken en volgt erna (de laatste stand wint).
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  bouwen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Geen dependencies: bouw_publiek.py en app.py draaien op de
+      # standaardbibliotheek. De python3 van de runner volstaat.
+      - name: Site bouwen
+        run: python3 bouw_publiek.py uit
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: uit
+
+  publiceren:
+    needs: bouwen
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

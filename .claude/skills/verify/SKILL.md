@@ -49,3 +49,22 @@ de shell (exit 144) — gebruik `app[.]py` en aparte aanroepen.
 - Dashboardgrafieken lopen t/m vandaag (staaf van vandaag halfdoorzichtig,
   zweeftekst "dag loopt nog"); de tegels en de weekgemiddeldelijnen rekenen
   t/m gisteren. Gewichtmeting van vandaag telt wél mee.
+
+## Publieke site (alleen lezen) testen
+```bash
+python3 bouw_publiek.py uit && python3 -m http.server -d uit 8392 --bind 127.0.0.1
+```
+Test ze bij voorkeur ónder een submap (GitHub Pages serveert op `/bonenteller/`):
+kopieer `uit/` naar `<scratchpad>/serveer/bonenteller/` en serveer `serveer/`.
+Zo vang je paden die nog met `/` beginnen.
+
+Waar op te letten (Marionette, zie hierboven):
+- de tabbladen laden zonder consolefouten; `#tabs button[data-paneel=instellingen]`
+  is onzichtbaar en er is geen enkel zichtbaar `form` behalve `#form-notitie`
+  (de notitie staat er wel, maar `readOnly`);
+- `POST /api/gewicht` geeft `403` met een Nederlandstalige melding;
+- de zweefinfo werkt zonder weegschaalfoto's (`data/afbeeldingen.json` = `{}`);
+- de exportknoppen op Gegevens wijzen naar `./data/gezondheid.db` en
+  `./data/gezondheid-csv.zip`.
+Let op: `location.hash` aanpassen wisselt géén tabblad (app.js leest de hash
+alleen bij het laden) — navigeer met een volledige URL per tabblad.

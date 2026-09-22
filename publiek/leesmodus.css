@@ -1,0 +1,36 @@
+/* ===========================================================================
+   Alleen-lezen weergave: alles waarmee je zou schrijven, uit beeld.
+   leesmodus.js zet hiervoor de klasse 'leesmodus' op <body>.
+   =========================================================================== */
+
+.leesmodus-banner {
+  margin: 0 0 12px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  background: var(--kaart, #211c18);
+  color: var(--gedempt, #a99b85);
+  font-size: 13px;
+}
+
+body.leesmodus form:not(#form-notitie),               /* alle invoerformulieren */
+body.leesmodus #form-notitie button,                  /* de notitie blijft leesbaar, */
+body.leesmodus #form-notitie .melding,                /* alleen opslaan verdwijnt */
+body.leesmodus #dag-kopieer,                          /* "Kopieer van gisteren" */
+body.leesmodus #paneel-dagboek details,               /* "Vrije invoer" */
+body.leesmodus td.acties,                             /* × verwijderen / ✓ opslaan */
+body.leesmodus th.acties,
+body.leesmodus #tabs button[data-paneel="instellingen"] {
+  display: none !important;
+}
+
+/* Cellen die thuis klikbaar zijn om te bewerken, zijn hier gewone tekst. */
+body.leesmodus td.klik-bewerk {
+  cursor: default;
+}
+
+/* De dagnotitie blijft staan om te lezen (leesmodus.js zet ze op readonly),
+   maar ziet er niet meer uit als een invoerveld. */
+body.leesmodus #dag-notitie {
+  border-color: transparent;
+  resize: none;
+}
