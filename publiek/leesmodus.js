@@ -12,7 +12,8 @@
         app.js toont die vanzelf in het meldingsvak van het scherm.
      2. de klasse 'leesmodus' op <body> zetten; leesmodus.css verbergt
         daarmee alle invoer (formulieren, ×-knoppen, het tabblad
-        Instellingen).
+        Instellingen). De pagina ziet er verder uit als thuis: geen banner,
+        geen melding — er is alleen niets te bewerken.
 
    app.js zelf blijft dus ongewijzigd: hij heeft maar één fetch(), in api().
    =========================================================================== */
@@ -96,9 +97,4 @@ document.addEventListener("DOMContentLoaded", () => {
   document.body.classList.add("leesmodus");
   // De dagnotitie mag gelezen worden, niet getypt.
   document.getElementById("dag-notitie").readOnly = true;
-  const banner = document.createElement("p");
-  banner.className = "leesmodus-banner";
-  banner.textContent = "Meelezen — deze weergave toont de data van de laatste synchronisatie "
-    + "en kan niet bewerkt worden.";
-  document.body.prepend(banner);
 });

@@ -3,15 +3,6 @@
    leesmodus.js zet hiervoor de klasse 'leesmodus' op <body>.
    =========================================================================== */
 
-.leesmodus-banner {
-  margin: 0 0 12px;
-  padding: 7px 12px;
-  border-radius: 8px;
-  background: var(--kaart, #211c18);
-  color: var(--gedempt, #a99b85);
-  font-size: 13px;
-}
-
 body.leesmodus form:not(#form-notitie),               /* alle invoerformulieren */
 body.leesmodus #form-notitie button,                  /* de notitie blijft leesbaar, */
 body.leesmodus #form-notitie .melding,                /* alleen opslaan verdwijnt */

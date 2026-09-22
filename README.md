@@ -92,7 +92,8 @@ kunnen meekijken. Het is dezelfde frontend, maar zonder server: `bouw_publiek.py
 schrijft elk API-antwoord één keer naar een bestand in `uit/data/`, en
 `publiek/leesmodus.js` vangt `fetch()` op en bedient elke `GET /api/…` uit die
 bestanden. Schrijfacties krijgen een `403` met een melding; `publiek/leesmodus.css`
-verbergt alle invoer en het tabblad Instellingen. `static/app.js` blijft dus
+verbergt alle invoer en het tabblad Instellingen. De pagina ziet er verder uit
+als thuis — geen banner of waarschuwing, er valt gewoon niets te bewerken. `static/app.js` blijft dus
 onveranderd — die heeft maar één `fetch()`, in `api()`.
 
 Het script roept de API-functies uit `app.py` zelf aan, zodat de gebakken JSON
