@@ -14,6 +14,9 @@
         daarmee alle invoer (formulieren, ×-knoppen, het tabblad
         Instellingen). De pagina ziet er verder uit als thuis: geen banner,
         geen melding — er is alleen niets te bewerken.
+     3. de tabbladen uit VERBORGEN_TABS weglaten, en in de gewichtsgrafiek
+        van het dashboard alleen de wekelijkse weging (vrijdag) plus de
+        meting van vandaag tonen.
 
    app.js zelf blijft dus ongewijzigd: hij heeft maar één fetch(), in api().
    =========================================================================== */
@@ -22,6 +25,18 @@
 // submap werkt (GitHub Pages serveert op /<repo>/).
 const BASIS = new URL(".", location.href);
 const echteFetch = window.fetch.bind(window);
+
+/* --- wat de publieke site anders doet dan de app thuis ---------------- */
+
+// Tabbladen die alleen thuis zin hebben: die zijn hier niet te openen.
+// Instellingen verbergt leesmodus.css al (dat is puur invoer).
+const VERBORGEN_TABS = ["dagboek", "week", "voedingsmiddelen"];
+
+// De gewichtsgrafiek op het dashboard toont alleen de wekelijkse weging —
+// de dag van de week staat hier (0 = zondag … 5 = vrijdag) — plus de meting
+// van vandaag, zodat de laatste stand er altijd bij staat. De tabel op
+// Gegevens houdt wél alle metingen: daar hoort de volledige reeks.
+const WEEGDAG = 5;
 
 function antwoord(data, status = 200) {
   return new Response(JSON.stringify(data),
@@ -32,6 +47,33 @@ async function json(bestand) {
   const r = await echteFetch(new URL("data/" + bestand, BASIS));
   if (!r.ok) throw new Error(`data/${bestand} ontbreekt in deze weergave`);
   return r.json();
+}
+
+// Dag van de week uit een ISO-datum, in lokale tijd gerekend (net als in
+// app.js), zodat "vrijdag" en "vandaag" jouw kalenderdagen zijn.
+function weekdag(iso) {
+  const [j, m, d] = iso.split("-").map(Number);
+  return new Date(j, m - 1, d).getDay();
+}
+
+function vandaagIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+    + `-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Alleen de wekelijkse weging en de meting van vandaag.
+function alleenWeegdagen(gewichten) {
+  const vandaag = vandaagIso();
+  return gewichten.filter((g) => weekdag(g.datum) === WEEGDAG || g.datum === vandaag);
+}
+
+// Elk tabblad haalt zijn data op nadat activeerTab() de panelen heeft
+// omgezet, dus hieraan zie je wie om /api/gewicht vraagt: het dashboard
+// (grafiek + tegels) of de tabel op Gegevens.
+function dashboardVraagt() {
+  const paneel = document.getElementById("paneel-dashboard");
+  return !!paneel && paneel.classList.contains("actief");
 }
 
 // De server filtert ?van=&tot= in SQL; hier snijden we dezelfde periode uit
@@ -51,7 +93,10 @@ async function bedien(pad, query) {
   let m;
 
   if (pad === "/api/instellingen") return antwoord(await json("instellingen.json"));
-  if (pad === "/api/gewicht") return antwoord(await json("gewicht.json"));
+  if (pad === "/api/gewicht") {
+    const gewichten = await json("gewicht.json");
+    return antwoord(dashboardVraagt() ? alleenWeegdagen(gewichten) : gewichten);
+  }
   if (pad === "/api/sport") return antwoord(await json("sport.json"));
   if (pad === "/api/afbeeldingen") return antwoord(await json("afbeeldingen.json"));
   if (pad === "/api/voedingsmiddelen") return antwoord(await json("voedingsmiddelen.json"));
@@ -93,8 +138,34 @@ window.fetch = function (bron, opties = {}) {
   return echteFetch(bron, opties);
 };
 
-document.addEventListener("DOMContentLoaded", () => {
+/* --- verborgen tabbladen ----------------------------------------------
+   De knoppen gaan weg; de panelen blijven in de pagina staan (app.js
+   verwijst er bij het opstarten naar), maar zijn niet meer te bereiken:
+   activeerTab() stopt zodra de knop ontbreekt. Een hash als #dagboek in de
+   URL wissen we hieronder nog vóór app.js draait — die leest de hash één
+   keer bij het laden, dus daarna kan niemand er nog naartoe. */
+
+function verbergTabs() {
   document.body.classList.add("leesmodus");
+  for (const naam of VERBORGEN_TABS) {
+    const knop = document.querySelector(`#tabs button[data-paneel="${naam}"]`);
+    if (knop) knop.style.display = "none";
+  }
   // De dagnotitie mag gelezen worden, niet getypt.
-  document.getElementById("dag-notitie").readOnly = true;
-});
+  const notitie = document.getElementById("dag-notitie");
+  if (notitie) notitie.readOnly = true;
+}
+
+// Dit bestand staat vóór app.js onderaan de pagina, dus de DOM is er al;
+// de test houdt het ook goed als het script ooit naar <head> verhuist.
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", verbergTabs);
+} else {
+  verbergTabs();
+}
+
+// Moet top-level blijven: app.js leest location.hash zodra hij geladen is.
+const gevraagdeTab = location.hash.slice(1).split("/")[0];
+if (VERBORGEN_TABS.includes(gevraagdeTab)) {
+  history.replaceState(null, "", location.pathname + location.search);
+}

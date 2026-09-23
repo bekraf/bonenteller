@@ -109,9 +109,14 @@ GitHub, en `.github/workflows/pages.yml` bouwt bij elke push de site opnieuw en
 zet ze op Pages. De gebakken site komt niet in git (`uit/` staat in `.gitignore`).
 
 Wat er **niet** in de publieke site zit: de weegschaalfoto's (`afbeeldingen.json`
-blijft leeg — de zweefinfo werkt gewoon zonder foto) en alles wat schrijft. Wat er
-wel in zit: alle gewicht-, voedings- en sportdata, inclusief de downloads van de
-database en de CSV's — die staan sowieso al in de publieke repo.
+blijft leeg — de zweefinfo werkt gewoon zonder foto), alles wat schrijft, en de
+tabbladen Dagboek, Weekoverzicht en Voedingsmiddelen (`VERBORGEN_TABS` in
+`publiek/leesmodus.js`). Er blijven dus twee tabbladen over: Dashboard en
+Gegevens. De gewichtsgrafiek op het dashboard toont er alleen de wekelijkse
+weging — de vrijdagen, zie `WEEGDAG` — plus de meting van vandaag; de tabel op
+Gegevens houdt wél alle metingen. Wat er verder wel in zit: alle gewicht-,
+voedings- en sportdata, inclusief de downloads van de database en de CSV's —
+die staan sowieso al in de publieke repo.
 
 ## Database
 
