@@ -59,17 +59,13 @@ kopieer `uit/` naar `<scratchpad>/serveer/bonenteller/` en serveer `serveer/`.
 Zo vang je paden die nog met `/` beginnen.
 
 Waar op te letten (Marionette, zie hierboven):
-- er zijn maar twee zichtbare tabbladen (Dashboard en Gegevens); Dagboek,
-  Weekoverzicht, Voedingsmiddelen en Instellingen zijn weg, en een URL met
-  `#dagboek`/`#week`/`#voedingsmiddelen` blijft op het dashboard staan met een
-  lege hash;
-- `/api/gewicht` geeft op het dashboard alleen vrijdagen + vandaag, en op
-  Gegevens alle metingen (leesmodus.js kijkt naar het actieve paneel);
+- alleen het tabblad Dashboard is zichtbaar; een URL met
+  `#dagboek`/`#week`/`#voedingsmiddelen`/`#gegevens` blijft op het dashboard
+  staan met een lege hash;
+- `/api/gewicht` geeft op het dashboard alleen vrijdagen + vandaag;
 - de tabbladen laden zonder consolefouten; er is geen enkel zichtbaar `form`
   behalve `#form-notitie` (de notitie staat er wel, maar `readOnly`);
 - `POST /api/gewicht` geeft `403` met een Nederlandstalige melding;
 - de zweefinfo werkt zonder weegschaalfoto's (`data/afbeeldingen.json` = `{}`);
-- de exportknoppen op Gegevens wijzen naar `./data/gezondheid.db` en
-  `./data/gezondheid-csv.zip`.
 Let op: `location.hash` aanpassen wisselt géén tabblad (app.js leest de hash
 alleen bij het laden) — navigeer met een volledige URL per tabblad.

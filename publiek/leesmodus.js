@@ -30,12 +30,12 @@ const echteFetch = window.fetch.bind(window);
 
 // Tabbladen die alleen thuis zin hebben: die zijn hier niet te openen.
 // Instellingen verbergt leesmodus.css al (dat is puur invoer).
-const VERBORGEN_TABS = ["dagboek", "week", "voedingsmiddelen"];
+const VERBORGEN_TABS = ["dagboek", "week", "voedingsmiddelen", "gegevens"];
 
 // De gewichtsgrafiek op het dashboard toont alleen de wekelijkse weging —
 // de dag van de week staat hier (0 = zondag … 5 = vrijdag) — plus de meting
-// van vandaag, zodat de laatste stand er altijd bij staat. De tabel op
-// Gegevens houdt wél alle metingen: daar hoort de volledige reeks.
+// van vandaag, zodat de laatste stand er altijd bij staat. (Komt het
+// tabblad Gegevens ooit terug, dan houdt de tabel daar wél alle metingen.)
 const WEEGDAG = 5;
 
 function antwoord(data, status = 200) {
