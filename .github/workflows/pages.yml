@@ -1,9 +1,13 @@
-# Publiceert de alleen-lezen website op GitHub Pages.
+# Publiceert de publieke website (alleen het dashboard) op GitHub Pages.
 #
 # Draait bij elke push naar main (dus ook bij de push van autopush.sh, die
 # gezondheid.db elk uur naar GitHub zet): bouw_publiek.py bakt de site uit de
 # database en het resultaat gaat rechtstreeks naar Pages. Er komt dus niets
 # afgeleids in git terecht.
+#
+# Daarnaast één keer per nacht: de gewichtsgrafiek toont naast de vrijdagen
+# alleen de meting van vandaag, en na middernacht moet die van gisteren ook
+# uit het gepubliceerde bestand verdwijnen — ook als je die dag niets invoert.
 #
 # Eenmalig instellen: Settings -> Pages -> Source: GitHub Actions.
 
@@ -12,6 +16,11 @@ name: Publieke website
 on:
   push:
     branches: [main]
+  schedule:
+    # Cron draait in UTC: 23:05 UTC is 01:05 in de zomer en 00:05 in de
+    # winter in België — allebei net na middernacht. GitHub start geplande
+    # runs soms wat later; dat is hier geen probleem.
+    - cron: "5 23 * * *"
   workflow_dispatch:      # ook met de hand te starten
 
 permissions:

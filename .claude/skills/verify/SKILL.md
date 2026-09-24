@@ -50,7 +50,7 @@ de shell (exit 144) — gebruik `app[.]py` en aparte aanroepen.
   zweeftekst "dag loopt nog"); de tegels en de weekgemiddeldelijnen rekenen
   t/m gisteren. Gewichtmeting van vandaag telt wél mee.
 
-## Publieke site (alleen lezen) testen
+## Publieke site (alleen het dashboard) testen
 ```bash
 python3 bouw_publiek.py uit && python3 -m http.server -d uit 8392 --bind 127.0.0.1
 ```
@@ -58,14 +58,27 @@ Test ze bij voorkeur ónder een submap (GitHub Pages serveert op `/bonenteller/`
 kopieer `uit/` naar `<scratchpad>/serveer/bonenteller/` en serveer `serveer/`.
 Zo vang je paden die nog met `/` beginnen.
 
-Waar op te letten (Marionette, zie hierboven):
-- alleen het tabblad Dashboard is zichtbaar; een URL met
-  `#dagboek`/`#week`/`#voedingsmiddelen`/`#gegevens` blijft op het dashboard
-  staan met een lege hash;
-- `/api/gewicht` geeft op het dashboard alleen vrijdagen + vandaag;
-- de tabbladen laden zonder consolefouten; er is geen enkel zichtbaar `form`
-  behalve `#form-notitie` (de notitie staat er wel, maar `readOnly`);
-- `POST /api/gewicht` geeft `403` met een Nederlandstalige melding;
-- de zweefinfo werkt zonder weegschaalfoto's (`data/afbeeldingen.json` = `{}`);
-Let op: `location.hash` aanpassen wisselt géén tabblad (app.js leest de hash
-alleen bij het laden) — navigeer met een volledige URL per tabblad.
+De build faalt zelf al als er andere bestanden dan de twaalf verwachte in `uit/`
+staan. In de browser (Marionette, zie hierboven) nakijken:
+- **Zelfde dashboard als thuis**: vergelijk per periode (`?dagen=7|14|30|90|jaar|0`)
+  de innerHTML van `#tegels`, `#grafiek-gewicht`, `#grafiek-kcal`,
+  `#grafiek-sport` en de legendes, en de tekst van `#zweefinfo` na een
+  `pointermove` op elk `rect[fill="transparent"]`, met een referentiebuild.
+  Verschillen wijzen meestal op een veld dat `bouw_publiek.py` wegsnoeit
+  maar het dashboard nu wél leest.
+- **Niets anders bereikbaar**: alleen `#tabs button[data-paneel=dashboard]` en
+  alleen `#paneel-dashboard` bestaan; `#dagboek`, `#instellingen`, … in de URL
+  blijven op het dashboard met een lege hash; een klik op een kcal-staaf doet
+  niets; `activeerTab("dagboek")` in de console verandert niets.
+- **API**: elke `/api/`-aanvraag buiten `ROUTES` in `publiek/leesmodus.js` en
+  elke POST/PUT/DELETE geeft `403`; `data/dag/…`, `data/gezondheid.db` e.d.
+  geven `404`.
+- **Geen dagboekdata**: geen enkele voedingsnaam uit `voedingslog` in
+  `document.documentElement.textContent` (dus ook niet in verborgen delen),
+  ook niet na het aanroepen van `laadDag()`, `laadWeek()`, … in de console.
+- **Gewicht**: `/api/gewicht` geeft alleen vrijdagen + de meting van vandaag;
+  zet je in `data/gewicht.json` bij `vandaag` een datum van gisteren, dan
+  verdwijnt die uit de grafiek.
+
+Let op: `location.hash` aanpassen herlaadt de pagina niet — navigeer met een
+volledige URL (met een wisselende `?t=`) om het opstarten te testen.

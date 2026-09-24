@@ -1,27 +1,19 @@
 /* ===========================================================================
-   Alleen-lezen weergave: alles waarmee je zou schrijven, uit beeld.
-   leesmodus.js zet hiervoor de klasse 'leesmodus' op <body>.
+   Publieke weergave: aanvullingen op stijl.css
+   ---------------------------------------------------------------------------
+   De andere tabbladen zitten niet eens in de publieke pagina (bouw_publiek.py
+   knipt ze eruit); hier staan alleen nog twee kleine correcties.
    =========================================================================== */
 
-body.leesmodus form:not(#form-notitie),               /* alle invoerformulieren */
-body.leesmodus #form-notitie button,                  /* de notitie blijft leesbaar, */
-body.leesmodus #form-notitie .melding,                /* alleen opslaan verdwijnt */
-body.leesmodus #dag-kopieer,                          /* "Kopieer van gisteren" */
-body.leesmodus #paneel-dagboek details,               /* "Vrije invoer" */
-body.leesmodus td.acties,                             /* × verwijderen / ✓ opslaan */
-body.leesmodus th.acties,
-body.leesmodus #tabs button[data-paneel="instellingen"] {
+/* Stand-ins voor elementen uit de weggeknipte tabbladen (zie stand_ins in
+   bouw_publiek.py): leeg, en nooit zichtbaar — ook niet als een regel in
+   stijl.css het 'hidden'-attribuut zou overschrijven. */
+#stand-ins {
   display: none !important;
 }
 
-/* Cellen die thuis klikbaar zijn om te bewerken, zijn hier gewone tekst. */
-body.leesmodus td.klik-bewerk {
+/* Thuis opent een klik op een kcal-staaf het dagboek (handje als cursor);
+   hier doet die klik niets, dus ook geen handje. */
+#grafiek-kcal rect[cursor="pointer"] {
   cursor: default;
-}
-
-/* De dagnotitie blijft staan om te lezen (leesmodus.js zet ze op readonly),
-   maar ziet er niet meer uit als een invoerveld. */
-body.leesmodus #dag-notitie {
-  border-color: transparent;
-  resize: none;
 }

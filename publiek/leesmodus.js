@@ -1,24 +1,24 @@
 "use strict";
 
 /* ===========================================================================
-   Alleen-lezen laag voor de publieke website (GitHub Pages)
+   Publieke weergave (GitHub Pages): alleen het dashboard, alleen lezen
    ---------------------------------------------------------------------------
-   De publieke site draait dezelfde app.js als thuis, maar zonder server. Dit
-   bestand wordt vóór app.js geladen en doet twee dingen:
+   De publieke site draait dezelfde app.js als thuis, maar zonder server.
+   Wat publiek is, beslist bouw_publiek.py: die zet alleen het dashboard in
+   de pagina en alleen de data die het dashboard toont in data/. Wat daar
+   niet staat, bestaat online niet — ook niet voor wie de URL's zelf typt of
+   in de console aan de slag gaat.
 
-     1. fetch() vervangen: elke GET /api/... wordt bediend uit de JSON die
-        bouw_publiek.py in data/ heeft gezet. Schrijfacties (POST/PUT/DELETE)
-        krijgen een nette 403 met een Nederlandstalige melding — api() in
-        app.js toont die vanzelf in het meldingsvak van het scherm.
-     2. de klasse 'leesmodus' op <body> zetten; leesmodus.css verbergt
-        daarmee alle invoer (formulieren, ×-knoppen, het tabblad
-        Instellingen). De pagina ziet er verder uit als thuis: geen banner,
-        geen melding — er is alleen niets te bewerken.
-     3. de tabbladen uit VERBORGEN_TABS weglaten, en in de gewichtsgrafiek
-        van het dashboard alleen de wekelijkse weging (vrijdag) plus de
-        meting van vandaag tonen.
+   Dit bestand wordt vóór app.js geladen en doet twee dingen:
+     1. fetch() vervangen: de aanvragen die het dashboard doet (ROUTES)
+        worden bediend uit data/; elke andere aanvraag en elke schrijfactie
+        krijgt een 403. Opslaan kan online sowieso nergens: GitHub Pages
+        serveert alleen bestanden en weigert zelf elke POST/PUT/DELETE.
+     2. de URL-hash leeg houden: app.js opent thuis een tabblad op basis van
+        de hash (#dagboek, …), en een klik op een kcal-staaf zet er één. Hier
+        bestaat alleen het dashboard.
 
-   app.js zelf blijft dus ongewijzigd: hij heeft maar één fetch(), in api().
+   app.js zelf blijft ongewijzigd: hij heeft maar één fetch(), in api().
    =========================================================================== */
 
 // Alles wordt relatief aan de pagina opgehaald, zodat de site ook onder een
@@ -26,17 +26,7 @@
 const BASIS = new URL(".", location.href);
 const echteFetch = window.fetch.bind(window);
 
-/* --- wat de publieke site anders doet dan de app thuis ---------------- */
-
-// Tabbladen die alleen thuis zin hebben: die zijn hier niet te openen.
-// Instellingen verbergt leesmodus.css al (dat is puur invoer).
-const VERBORGEN_TABS = ["dagboek", "week", "voedingsmiddelen", "gegevens"];
-
-// De gewichtsgrafiek op het dashboard toont alleen de wekelijkse weging —
-// de dag van de week staat hier (0 = zondag … 5 = vrijdag) — plus de meting
-// van vandaag, zodat de laatste stand er altijd bij staat. (Komt het
-// tabblad Gegevens ooit terug, dan houdt de tabel daar wél alle metingen.)
-const WEEGDAG = 5;
+const GEWEIGERD = "Niet beschikbaar in de publieke weergave.";
 
 function antwoord(data, status = 200) {
   return new Response(JSON.stringify(data),
@@ -53,31 +43,11 @@ async function json(bestand) {
   return r.json();
 }
 
-// Dag van de week uit een ISO-datum, in lokale tijd gerekend (net als in
-// app.js), zodat "vrijdag" en "vandaag" jouw kalenderdagen zijn.
-function weekdag(iso) {
-  const [j, m, d] = iso.split("-").map(Number);
-  return new Date(j, m - 1, d).getDay();
-}
-
+// Vandaag als ISO-datum, in lokale tijd (net als app.js).
 function vandaagIso() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
     + `-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-// Alleen de wekelijkse weging en de meting van vandaag.
-function alleenWeegdagen(gewichten) {
-  const vandaag = vandaagIso();
-  return gewichten.filter((g) => weekdag(g.datum) === WEEGDAG || g.datum === vandaag);
-}
-
-// Elk tabblad haalt zijn data op nadat activeerTab() de panelen heeft
-// omgezet, dus hieraan zie je wie om /api/gewicht vraagt: het dashboard
-// (grafiek + tegels) of de tabel op Gegevens.
-function dashboardVraagt() {
-  const paneel = document.getElementById("paneel-dashboard");
-  return !!paneel && paneel.classList.contains("actief");
 }
 
 // De server filtert ?van=&tot= in SQL; hier snijden we dezelfde periode uit
@@ -91,85 +61,54 @@ function snijPeriode(data, query) {
     Object.entries(data).filter(([datum]) => datum >= van && datum <= tot));
 }
 
-// Eén GET-pad omzetten naar het bijbehorende gebakken bestand.
-async function bedien(pad, query) {
-  const q = new URLSearchParams(query);
-  let m;
+/* --- 1. de enige GET-aanvragen die beantwoord worden -------------------
+   Precies wat het dashboard en het opstarten van app.js opvragen; zie
+   laadDashboard() en start() in app.js. Al de rest krijgt een 403. */
+const ROUTES = {
+  "/api/instellingen": () => json("instellingen.json"),
+  "/api/gewicht": async () => {
+    // bouw_publiek.py zet de wekelijkse weging klaar, en apart de meting van
+    // de bouwdag. Die laatste hoort er alleen bij zolang het vandaag is: tot
+    // de nachtelijke herbouw kan het bestand nog die van gisteren bevatten.
+    const { weegdagen, vandaag } = await json("gewicht.json");
+    const reeks = vandaag && vandaag.datum === vandaagIso() ? [...weegdagen, vandaag] : weegdagen;
+    return reeks.sort((a, b) => a.datum.localeCompare(b.datum));
+  },
+  "/api/dagen": async (q) => snijPeriode(await json("dagen.json"), q),
+  "/api/notities": async (q) => snijPeriode(await json("notities.json"), q),
+  // Weegschaalfoto's en de voedingscatalogus gaan niet online. app.js vraagt
+  // beide wel op (de catalogus bij het opstarten), dus: een leeg antwoord.
+  "/api/afbeeldingen": () => ({}),
+  "/api/voedingsmiddelen": () => [],
+};
 
-  if (pad === "/api/instellingen") return antwoord(await json("instellingen.json"));
-  if (pad === "/api/gewicht") {
-    const gewichten = await json("gewicht.json");
-    return antwoord(dashboardVraagt() ? alleenWeegdagen(gewichten) : gewichten);
-  }
-  if (pad === "/api/sport") return antwoord(await json("sport.json"));
-  if (pad === "/api/afbeeldingen") return antwoord(await json("afbeeldingen.json"));
-  if (pad === "/api/voedingsmiddelen") return antwoord(await json("voedingsmiddelen.json"));
-  if (pad === "/api/dagen") return antwoord(snijPeriode(await json("dagen.json"), q));
-  if (pad === "/api/notities") return antwoord(snijPeriode(await json("notities.json"), q));
-
-  if ((m = pad.match(/^\/api\/dag\/(\d{4}-\d{2}-\d{2})$/))) {
-    try {
-      return antwoord(await json(`dag/${m[1]}.json`));
-    } catch {
-      // Een dag zonder data heeft geen bestand; de server geeft dan een lege
-      // dag terug, dus dat doen we hier ook (zelfde vorm als api_dag).
-      return antwoord({
-        datum: m[1], regels: [], sport: [], notitie: "",
-        totaal: { kcal: 0, vet: 0, koolhydraten: 0, eiwit: 0, zout: 0, vezels: 0 },
-      });
-    }
-  }
-  if ((m = pad.match(/^\/api\/voedingsmiddelen\/(\d+)\/historiek$/)))
-    return antwoord(await json(`historiek/${m[1]}.json`));
-
-  return antwoord({ fout: `Onbekend pad ${pad} in de alleen-lezen weergave.` }, 404);
-}
-
-window.fetch = function (bron, opties = {}) {
+window.fetch = async function (bron, opties = {}) {
   const url = typeof bron === "string" ? bron : bron.url;
   if (typeof url === "string" && url.startsWith("/api/")) {
-    if ((opties.method || "GET").toUpperCase() !== "GET") {
-      return Promise.resolve(antwoord(
-        { fout: "Dit is een alleen-lezen weergave — aanpassen kan alleen in de app thuis." },
-        403));
-    }
     const [pad, query = ""] = url.split("?");
-    return bedien(pad, query);
+    const route = Object.hasOwn(ROUTES, pad) ? ROUTES[pad] : null;
+    if (!route || (opties.method || "GET").toUpperCase() !== "GET") {
+      return antwoord({ fout: GEWEIGERD }, 403);
+    }
+    try {
+      return antwoord(await route(new URLSearchParams(query)));
+    } catch (fout) {
+      return antwoord({ fout: fout.message }, 404);
+    }
   }
-  // Andere absolute paden (bv. /afbeeldingen/…) ook relatief maken.
+  // Andere absolute paden ook relatief aan de pagina maken.
   if (typeof url === "string" && url.startsWith("/"))
     return echteFetch(new URL(url.slice(1), BASIS), opties);
   return echteFetch(bron, opties);
 };
 
-/* --- verborgen tabbladen ----------------------------------------------
-   De knoppen gaan weg; de panelen blijven in de pagina staan (app.js
-   verwijst er bij het opstarten naar), maar zijn niet meer te bereiken:
-   activeerTab() stopt zodra de knop ontbreekt. Een hash als #dagboek in de
-   URL wissen we hieronder nog vóór app.js draait — die leest de hash één
-   keer bij het laden, dus daarna kan niemand er nog naartoe. */
-
-function verbergTabs() {
-  document.body.classList.add("leesmodus");
-  for (const naam of VERBORGEN_TABS) {
-    const knop = document.querySelector(`#tabs button[data-paneel="${naam}"]`);
-    if (knop) knop.style.display = "none";
-  }
-  // De dagnotitie mag gelezen worden, niet getypt.
-  const notitie = document.getElementById("dag-notitie");
-  if (notitie) notitie.readOnly = true;
+/* --- 2. de hash leeg houden --------------------------------------------
+   Moet top-level blijven: app.js leest location.hash zodra hij geladen is
+   en opent dan dat tabblad — hier zou dat een leeg scherm geven, want de
+   andere tabbladen bestaan niet. Een klik op een kcal-staaf zet thuis
+   #dagboek/<datum>; hier doet die klik niets en wissen we de hash meteen. */
+function wisHash() {
+  if (location.hash) history.replaceState(null, "", location.pathname + location.search);
 }
-
-// Dit bestand staat vóór app.js onderaan de pagina, dus de DOM is er al;
-// de test houdt het ook goed als het script ooit naar <head> verhuist.
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", verbergTabs);
-} else {
-  verbergTabs();
-}
-
-// Moet top-level blijven: app.js leest location.hash zodra hij geladen is.
-const gevraagdeTab = location.hash.slice(1).split("/")[0];
-if (VERBORGEN_TABS.includes(gevraagdeTab)) {
-  history.replaceState(null, "", location.pathname + location.search);
-}
+wisHash();
+window.addEventListener("hashchange", wisHash);

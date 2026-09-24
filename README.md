@@ -75,29 +75,47 @@ static/
   stijl.css       # opmaak
   manifest.json   # webmanifest (installeren op het beginscherm)
   icoon-*.png     # app-iconen
-bouw_publiek.py   # bakt de publieke alleen-lezen site (zie hieronder)
+bouw_publiek.py   # bakt de publieke site: alleen het dashboard (zie hieronder)
 publiek/
-  leesmodus.js    # bedient /api/... uit gebakken JSON; blokkeert schrijven
-  leesmodus.css   # verbergt alle invoer
+  leesmodus.js    # bedient de dashboard-API uit gebakken JSON; weigert de rest
+  leesmodus.css   # twee kleine correcties voor de publieke pagina
 ```
 
 `app.py` bevat, van boven naar beneden: hulpfuncties en invoervalidatie, de
 API-functies (één per endpoint), en de HTTP-handler die URL's naar die functies
 routeert.
 
-## Publieke website (alleen lezen)
+## Publieke website (alleen het dashboard)
 
 Naast de lokale app staat er een publieke versie op GitHub Pages waar anderen
-kunnen meekijken. Het is dezelfde frontend, maar zonder server: `bouw_publiek.py`
-schrijft elk API-antwoord één keer naar een bestand in `uit/data/`, en
-`publiek/leesmodus.js` vangt `fetch()` op en bedient elke `GET /api/…` uit die
-bestanden. Schrijfacties krijgen een `403` met een melding; `publiek/leesmodus.css`
-verbergt alle invoer en het tabblad Instellingen. De pagina ziet er verder uit
-als thuis — geen banner of waarschuwing, er valt gewoon niets te bewerken. `static/app.js` blijft dus
-onveranderd — die heeft maar één `fetch()`, in `api()`.
+kunnen meekijken: **alleen het dashboard, alleen lezen**. Het is dezelfde
+frontend, maar zonder server.
 
-Het script roept de API-functies uit `app.py` zelf aan, zodat de gebakken JSON
-niet kan gaan afwijken van wat de lokale server geeft.
+Wat publiek is, beslist `bouw_publiek.py` — niet de browser. Alles wat in `uit/`
+belandt, kan iedereen downloaden; wat er niet in staat, bestaat online niet, wat
+iemand ook probeert (zelf URL's typen, klikken, de console). Daarom werkt het
+script met allowlists:
+
+- **pagina** — van `index.html` blijft alleen het tabblad Dashboard over; de
+  andere knoppen en panelen worden eruit geknipt. De paar elementen daarvan die
+  `app.js` bij het opstarten opzoekt, krijgen een lege, verborgen stand-in.
+- **data** — alleen wat het dashboard toont, en alleen de velden die het leest:
+  per dag de kcal en de sport, de dagnotities (die staan in het zweefvenster van
+  de kcal-grafiek), de kleuren en vijf instellingen. Geen dagboek per dag, geen
+  macro's, geen catalogus, geen weegschaalfoto's, geen database-download.
+- **gewicht** — alleen de wekelijkse weging (vrijdag, `WEEGDAG`) plus de meting
+  van vandaag. De workflow bouwt elke nacht opnieuw, zodat die van gisteren ook
+  uit het bestand verdwijnt.
+- **bestanden** — precies twaalf; de build faalt als er iets anders in `uit/`
+  staat.
+
+`publiek/leesmodus.js` vangt in de browser `fetch()` op: de aanvragen van het
+dashboard worden bediend uit `uit/data/`, al de rest krijgt een `403`. Opslaan
+kan online sowieso nergens — GitHub Pages serveert alleen bestanden en weigert
+zelf elke POST/PUT/DELETE. Het script roept de API-functies uit `app.py` zelf aan
+en snoeit daarna, zodat de publieke cijfers niet kunnen afwijken van wat de app
+thuis toont. `app.py` en `static/` blijven ongewijzigd: de app thuis merkt hier
+niets van.
 
 ```bash
 python3 bouw_publiek.py            # bouwt uit/
@@ -105,16 +123,14 @@ python3 -m http.server -d uit 8080 # even bekijken op http://127.0.0.1:8080
 ```
 
 De publicatie loopt vanzelf: de systemd-timer pusht `gezondheid.db` elk uur naar
-GitHub, en `.github/workflows/pages.yml` bouwt bij elke push de site opnieuw en
-zet ze op Pages. De gebakken site komt niet in git (`uit/` staat in `.gitignore`).
+GitHub, en `.github/workflows/pages.yml` bouwt bij elke push (en elke nacht) de
+site opnieuw en zet ze op Pages. De gebakken site komt niet in git (`uit/` staat
+in `.gitignore`).
 
-Wat er **niet** in de publieke site zit: de weegschaalfoto's (`afbeeldingen.json`
-blijft leeg — de zweefinfo werkt gewoon zonder foto), alles wat schrijft, en de
-tabbladen Dagboek, Weekoverzicht, Voedingsmiddelen en Gegevens (`VERBORGEN_TABS`
-in `publiek/leesmodus.js`). Alleen het Dashboard blijft over. De gewichtsgrafiek
-toont er alleen de wekelijkse weging — de vrijdagen, zie `WEEGDAG` — plus de
-meting van vandaag. De gebakken data zelf is wel volledig (`uit/data/`, inclusief
-`gezondheid.db` en de CSV-zip), maar dat staat sowieso al in de publieke repo.
+> **Let op:** de website toont alleen het dashboard, maar deze repo zelf is
+> publiek — en `gezondheid.db` staat erin, met de volledige geschiedenis. Wie
+> de repo opent, kan dus alles downloaden. Wil je dat niet, dan moet de repo
+> privé (of de database eruit).
 
 ## Database
 
