@@ -43,8 +43,12 @@ function antwoord(data, status = 200) {
     { status, headers: { "Content-Type": "application/json" } });
 }
 
+// GitHub Pages laat browsers elk bestand 10 minuten bewaren (max-age=600).
+// Voor de data is dat te lang: net na een publicatie zou je nog de vorige
+// stand zien. 'no-cache' laat de browser telkens even navragen of het
+// bestand veranderd is — ongewijzigd kost dat een leeg 304-antwoord.
 async function json(bestand) {
-  const r = await echteFetch(new URL("data/" + bestand, BASIS));
+  const r = await echteFetch(new URL("data/" + bestand, BASIS), { cache: "no-cache" });
   if (!r.ok) throw new Error(`data/${bestand} ontbreekt in deze weergave`);
   return r.json();
 }
